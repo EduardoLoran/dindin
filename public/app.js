@@ -78,10 +78,30 @@ createApp({
         observation: "",
         isVariable: true,
       },
+      entryFilters: {
+        status: [],
+        cycle: [],
+        type: [],
+      },
+      entryFilterMenus: {
+        status: false,
+        cycle: false,
+        type: false,
+      },
       salaryInput: "",
       templateAmountInput: "",
       entryAmountInputs: {},
+      entryOriginalStates: {},
+      entryOrderByCycle: {
+        "Inicio Do Mes": [],
+        Quinzena: [],
+      },
+      collapsedEntryGroups: {
+        "Inicio Do Mes": true,
+        Quinzena: true,
+      },
       savingEntries: {},
+      savingAllEntries: false,
       authMode: "login",
       loggingIn: false,
       registering: false,
@@ -293,8 +313,33 @@ createApp({
 
       return groups.map((group) => ({
         ...group,
-        entries: this.month.entries.filter((entry) => entry.cycle === group.cycle),
+        entries: this.sortEntriesByCycleOrder(
+          this.filteredEntries.filter((entry) => entry.cycle === group.cycle),
+          group.cycle,
+        ),
       }));
+    },
+
+    filteredEntries() {
+      if (!this.month) {
+        return [];
+      }
+
+      return this.month.entries.filter((entry) => {
+        const statusMatches =
+          !this.entryFilters.status.length || this.entryFilters.status.includes(entry.status);
+        const cycleMatches =
+          !this.entryFilters.cycle.length || this.entryFilters.cycle.includes(entry.cycle);
+        const typeMatches =
+          !this.entryFilters.type.length ||
+          this.entryFilters.type.includes(entry.isVariable ? "variable" : "fixed");
+
+        return statusMatches && cycleMatches && typeMatches;
+      });
+    },
+
+    filteredEntriesTotal() {
+      return this.filteredEntries.reduce((total, entry) => total + Number(entry.amount || 0), 0);
     },
 
     detailCards() {
@@ -324,6 +369,64 @@ createApp({
     detailTotalAmount() {
       return this.detailCards.reduce((total, item) => total + Number(item.amount || 0), 0);
     },
+
+    detailCharts() {
+      const buildChart = (items, getKey, getLabel, limit = Infinity) => {
+        const grouped = new Map();
+
+        items.forEach((item) => {
+          const key = getKey(item);
+          const existing = grouped.get(key) || {
+            key,
+            label: getLabel(key),
+            count: 0,
+            amount: 0,
+          };
+
+          existing.count += 1;
+          existing.amount += Number(item.amount || 0);
+          grouped.set(key, existing);
+        });
+
+        const rows = Array.from(grouped.values())
+          .sort((left, right) => right.amount - left.amount)
+          .slice(0, limit);
+
+        const totalAmount = rows.reduce((sum, row) => sum + row.amount, 0) || 1;
+
+        return rows.map((row) => ({
+          ...row,
+          percent: Math.round((row.amount / totalAmount) * 100),
+        }));
+      };
+
+      return {
+        statuses: buildChart(
+          this.detailCards,
+          (item) => item.status || "pending",
+          (status) => this.statusLabel(status),
+        ),
+        cycles: buildChart(
+          this.detailCards,
+          (item) => item.cycle || "Inicio Do Mes",
+          (cycle) => this.cycleDisplayLabel(cycle),
+        ),
+        paymentMethods: buildChart(
+          this.detailCards,
+          (item) => item.paymentMethod || "none",
+          (paymentMethod) => this.paymentMethodLabel(paymentMethod),
+          4,
+        ),
+      };
+    },
+
+    pendingEntryChanges() {
+      if (!this.month) {
+        return [];
+      }
+
+      return this.month.entries.filter((entry) => this.isEntryDirty(entry));
+    },
   },
 
   methods: {
@@ -337,6 +440,94 @@ createApp({
         // Ignore storage issues and keep default theme.
       }
       return "light";
+    },
+
+    loadEntryGroupPreference() {
+      const fallback = {
+        "Inicio Do Mes": true,
+        Quinzena: true,
+      };
+
+      try {
+        const stored = window.localStorage.getItem("dindin-entry-groups-collapsed");
+        if (!stored) {
+          return fallback;
+        }
+
+        const parsed = JSON.parse(stored);
+        return {
+          "Inicio Do Mes": typeof parsed?.["Inicio Do Mes"] === "boolean" ? parsed["Inicio Do Mes"] : fallback["Inicio Do Mes"],
+          Quinzena: typeof parsed?.Quinzena === "boolean" ? parsed.Quinzena : fallback.Quinzena,
+        };
+      } catch (error) {
+        return fallback;
+      }
+    },
+
+    readCookie(name) {
+      const prefix = `${name}=`;
+      const raw = String(document.cookie || "")
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith(prefix));
+
+      return raw ? decodeURIComponent(raw.slice(prefix.length)) : "";
+    },
+
+    writeCookie(name, value, days = 365) {
+      const maxAge = Math.max(1, Number(days) || 365) * 24 * 60 * 60;
+      document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+    },
+
+    loadEntryFilterPreference() {
+      const fallback = {
+        status: [],
+        cycle: [],
+        type: [],
+      };
+
+      try {
+        const stored = this.readCookie("dindin-entry-filters");
+        if (!stored) {
+          return fallback;
+        }
+
+        const parsed = JSON.parse(stored);
+        const normalize = (filterKey) => {
+          const allowed = this.entryFilterOptions(filterKey)
+            .map((option) => option.value)
+            .filter((value) => value !== "all");
+          const incoming = Array.isArray(parsed?.[filterKey]) ? parsed[filterKey] : [];
+          return incoming.filter((value) => allowed.includes(value));
+        };
+
+        return {
+          status: normalize("status"),
+          cycle: normalize("cycle"),
+          type: normalize("type"),
+        };
+      } catch (error) {
+        return fallback;
+      }
+    },
+
+    persistEntryFilterPreference() {
+      try {
+        this.writeCookie("dindin-entry-filters", JSON.stringify(this.entryFilters));
+      } catch (error) {
+        // Ignore persistence errors.
+      }
+    },
+
+    persistEntryGroupPreference() {
+      try {
+        window.localStorage.setItem(
+          "dindin-entry-groups-collapsed",
+          JSON.stringify(this.collapsedEntryGroups),
+        );
+      } catch (error) {
+        // Ignore persistence errors.
+      }
     },
 
     applyTheme(theme) {
@@ -354,6 +545,99 @@ createApp({
     toggleTheme() {
       this.applyTheme(this.theme === "dark" ? "light" : "dark");
       this.closeProfileMenu();
+    },
+
+    setEntryFilter(filterKey, value) {
+      if (value === "all") {
+        this.entryFilters = {
+          ...this.entryFilters,
+          [filterKey]: [],
+        };
+        this.persistEntryFilterPreference();
+        return;
+      }
+
+      const currentValues = this.entryFilters?.[filterKey] || [];
+      const nextValues = currentValues.includes(value)
+        ? currentValues.filter((item) => item !== value)
+        : [...currentValues, value];
+
+      this.entryFilters = {
+        ...this.entryFilters,
+        [filterKey]: nextValues,
+      };
+      this.persistEntryFilterPreference();
+    },
+
+    clearEntryFilters() {
+      this.entryFilters = {
+        status: [],
+        cycle: [],
+        type: [],
+      };
+      this.persistEntryFilterPreference();
+    },
+
+    isEntryFilterActive(filterKey, value) {
+      if (value === "all") {
+        return !(this.entryFilters?.[filterKey] || []).length;
+      }
+
+      return (this.entryFilters?.[filterKey] || []).includes(value);
+    },
+
+    toggleEntryFilterMenu(filterKey) {
+      const nextOpen = !this.entryFilterMenus?.[filterKey];
+      this.entryFilterMenus = {
+        status: false,
+        cycle: false,
+        type: false,
+        [filterKey]: nextOpen,
+      };
+    },
+
+    closeEntryFilterMenus() {
+      this.entryFilterMenus = {
+        status: false,
+        cycle: false,
+        type: false,
+      };
+    },
+
+    entryFilterOptions(filterKey) {
+      return {
+        status: [
+          { value: "all", label: "Todos" },
+          { value: "pending", label: "Pendentes" },
+          { value: "paid", label: "Pagos" },
+          { value: "saved", label: "Guardados" },
+        ],
+        cycle: [
+          { value: "all", label: "Todos" },
+          { value: "Inicio Do Mes", label: "Início do Mês" },
+          { value: "Quinzena", label: "Quinzena" },
+        ],
+        type: [
+          { value: "all", label: "Todos" },
+          { value: "fixed", label: "Fixos" },
+          { value: "variable", label: "Variáveis" },
+        ],
+      }[filterKey] || [];
+    },
+
+    entryFilterLabel(filterKey) {
+      const options = this.entryFilterOptions(filterKey);
+      const selected = options.filter((option) => this.isEntryFilterActive(filterKey, option.value));
+
+      if (!selected.length) {
+        return "Todos";
+      }
+
+      if (selected.length === 1) {
+        return selected[0].label;
+      }
+
+      return `${selected.length} Selecionados`;
     },
 
     groupTotal(entries) {
@@ -742,6 +1026,17 @@ createApp({
       this.entryAmountInputs = Object.fromEntries(
         payload.month.entries.map((entry) => [entry.id, this.formatMoneyInput(entry.amount)])
       );
+      this.entryOriginalStates = Object.fromEntries(
+        payload.month.entries.map((entry) => [
+          entry.id,
+          {
+            amount: Number(entry.amount || 0),
+            cycle: entry.cycle,
+            status: entry.status,
+          },
+        ])
+      );
+      this.syncEntryOrder(payload.month.entries);
     },
 
     clearPasswordResetView() {
@@ -858,6 +1153,13 @@ createApp({
       this.salaryInput = "";
       this.templateAmountInput = "";
       this.entryAmountInputs = {};
+      this.entryOriginalStates = {};
+      this.entryOrderByCycle = {
+        "Inicio Do Mes": [],
+        Quinzena: [],
+      };
+      this.savingEntries = {};
+      this.savingAllEntries = false;
       this.activePage = "overview";
       this.authMode = "login";
       this.registerForm = {
@@ -916,6 +1218,10 @@ createApp({
         if (payload.authenticated) {
           this.user = payload.user;
           await this.bootstrap();
+          const latestMonth = this.months[0]?.monthKey || this.activeMonth;
+          if (latestMonth && latestMonth !== this.activeMonth) {
+            await this.bootstrap(latestMonth);
+          }
           this.applyRouteFromLocation();
           this.syncUrlWithState({ replace: true });
         } else {
@@ -1187,6 +1493,13 @@ createApp({
       this.lastAutoRolloverAt = "";
       this.salaryInput = "";
       this.entryAmountInputs = {};
+      this.entryOriginalStates = {};
+      this.entryOrderByCycle = {
+        "Inicio Do Mes": [],
+        Quinzena: [],
+      };
+      this.savingEntries = {};
+      this.savingAllEntries = false;
       this.error = "";
 
       const savedMonth = this.months.find((item) => item.monthKey === monthKey);
@@ -1405,6 +1718,112 @@ createApp({
       });
     },
 
+    syncEntryOrder(entries) {
+      const currentOrder = this.entryOrderByCycle || {};
+      const nextOrderByCycle = {
+        "Inicio Do Mes": [],
+        Quinzena: [],
+      };
+
+      for (const cycle of Object.keys(nextOrderByCycle)) {
+        const cycleEntries = entries.filter((entry) => entry.cycle === cycle);
+        const preservedIds = (currentOrder[cycle] || []).filter((id) =>
+          cycleEntries.some((entry) => entry.id === id)
+        );
+        const missingIds = cycleEntries
+          .map((entry) => entry.id)
+          .filter((id) => !preservedIds.includes(id));
+
+        nextOrderByCycle[cycle] = [...preservedIds, ...missingIds];
+      }
+
+      this.entryOrderByCycle = nextOrderByCycle;
+    },
+
+    sortEntriesByCycleOrder(entries, cycle) {
+      const order = this.entryOrderByCycle?.[cycle] || [];
+      const rank = new Map(order.map((id, index) => [id, index]));
+
+      return [...entries].sort((left, right) => {
+        const leftRank = rank.has(left.id) ? rank.get(left.id) : Number.MAX_SAFE_INTEGER;
+        const rightRank = rank.has(right.id) ? rank.get(right.id) : Number.MAX_SAFE_INTEGER;
+        return leftRank - rightRank;
+      });
+    },
+
+    isEntryDirty(entry) {
+      const original = this.entryOriginalStates?.[entry.id];
+      if (!original) {
+        return false;
+      }
+
+      return (
+        Number(this.parseMoneyInput(this.entryAmountInputs[entry.id])) !== Number(original.amount) ||
+        entry.cycle !== original.cycle ||
+        entry.status !== original.status
+      );
+    },
+
+    moveEntry(entry, direction) {
+      const cycle = entry.cycle;
+      const order = [...(this.entryOrderByCycle?.[cycle] || [])];
+      const currentIndex = order.indexOf(entry.id);
+
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= order.length) {
+        return;
+      }
+
+      [order[currentIndex], order[targetIndex]] = [order[targetIndex], order[currentIndex]];
+      this.entryOrderByCycle = {
+        ...this.entryOrderByCycle,
+        [cycle]: order,
+      };
+    },
+
+    canMoveEntry(entry, direction) {
+      const order = this.entryOrderByCycle?.[entry.cycle] || [];
+      const currentIndex = order.indexOf(entry.id);
+      if (currentIndex === -1) {
+        return false;
+      }
+
+      const targetIndex = currentIndex + direction;
+      return targetIndex >= 0 && targetIndex < order.length;
+    },
+
+    toggleEntryGroup(cycle) {
+      this.collapsedEntryGroups = {
+        ...this.collapsedEntryGroups,
+        [cycle]: !this.collapsedEntryGroups?.[cycle],
+      };
+      this.persistEntryGroupPreference();
+    },
+
+    isEntryGroupCollapsed(cycle) {
+      return Boolean(this.collapsedEntryGroups?.[cycle]);
+    },
+
+    updateEntryCycle(entry, nextCycle) {
+      const previousCycle = entry.cycle;
+      if (previousCycle === nextCycle) {
+        return;
+      }
+
+      const nextOrderByCycle = {
+        ...this.entryOrderByCycle,
+        [previousCycle]: (this.entryOrderByCycle?.[previousCycle] || []).filter((id) => id !== entry.id),
+        [nextCycle]: [...(this.entryOrderByCycle?.[nextCycle] || []).filter((id) => id !== entry.id), entry.id],
+      };
+
+      entry.cycle = nextCycle;
+      this.entryOrderByCycle = nextOrderByCycle;
+    },
+
     async saveSalary() {
       this.savingSalary = true;
       this.error = "";
@@ -1509,6 +1928,50 @@ createApp({
         this.toast("error", error.message);
       } finally {
         this.savingEntries = { ...this.savingEntries, [entry.id]: false };
+      }
+    },
+
+    async saveAllEntries() {
+      if (!this.pendingEntryChanges.length || this.savingAllEntries) {
+        return;
+      }
+
+      this.savingAllEntries = true;
+      this.error = "";
+
+      try {
+        const entriesToSave = this.pendingEntryChanges.map((entry) => ({
+          id: entry.id,
+          amount: this.parseMoneyInput(this.entryAmountInputs[entry.id]),
+          cycle: entry.cycle,
+          status: entry.status,
+        }));
+        let lastPayload = null;
+
+        for (const entry of entriesToSave) {
+          this.savingEntries = { ...this.savingEntries, [entry.id]: true };
+
+          lastPayload = await this.api(`/api/entries/${entry.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({
+              amount: entry.amount,
+              cycle: entry.cycle,
+              status: entry.status,
+            }),
+          });
+        }
+
+        if (lastPayload) {
+          this.applyPayload(lastPayload);
+        }
+
+        this.toast("success", "Alterações dos lançamentos salvas.");
+      } catch (error) {
+        this.error = error.message;
+        this.toast("error", error.message);
+      } finally {
+        this.savingAllEntries = false;
+        this.savingEntries = {};
       }
     },
 
@@ -1626,6 +2089,10 @@ createApp({
       }[cycle] || cycle;
     },
 
+    paymentMethodLabel(paymentMethod) {
+      return paymentMethod === "none" ? "Não informado" : paymentMethod;
+    },
+
     statusClass(status) {
       return {
         pending: "status-pending",
@@ -1667,21 +2134,27 @@ createApp({
     },
 
     handleDocumentClick(event) {
-      if (!this.profileMenuOpen) {
-        return;
+      const profileRoot = this.$refs.profileMenu;
+      if (this.profileMenuOpen) {
+        if (!profileRoot || !profileRoot.contains || !profileRoot.contains(event.target)) {
+          this.closeProfileMenu();
+        }
       }
 
-      const root = this.$refs.profileMenu;
-      if (root && root.contains && root.contains(event.target)) {
-        return;
+      const filterRoot = this.$refs.entryFilters;
+      if (
+        (this.entryFilterMenus.status || this.entryFilterMenus.cycle || this.entryFilterMenus.type) &&
+        (!filterRoot || !filterRoot.contains || !filterRoot.contains(event.target))
+      ) {
+        this.closeEntryFilterMenus();
       }
-
-      this.closeProfileMenu();
     },
   },
 
   mounted() {
     this.applyTheme(this.loadThemePreference());
+    this.collapsedEntryGroups = this.loadEntryGroupPreference();
+    this.entryFilters = this.loadEntryFilterPreference();
     window.addEventListener("keydown", this.handleKeydown);
     window.addEventListener("popstate", this.handlePopState);
     window.addEventListener("resize", this.handleViewportChange);

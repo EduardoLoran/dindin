@@ -450,14 +450,87 @@
             </div>
             <div class="entries-panel-summary" v-if="month">
               <div class="entries-summary-pill">
-                <strong>{{ month.entries.length }}</strong>
-                <span>lançamento(s)</span>
+                <strong>{{ filteredEntries.length }}</strong>
+                <span>Lançamento(s)</span>
               </div>
               <div class="entries-summary-pill">
-                <strong>{{ formatCurrency(month.summary.total) }}</strong>
-                <span>total do mês</span>
+                <strong>{{ formatCurrency(filteredEntriesTotal) }}</strong>
+                <span>Total do Mês</span>
               </div>
             </div>
+          </div>
+
+          <div class="entries-filter-panel" v-if="month && month.entries.length" ref="entryFilters">
+            <div class="entries-filter-group">
+              <span class="entries-filter-label">Status</span>
+              <button type="button" class="filter-select-trigger" @click="toggleEntryFilterMenu('status')">
+                <span>{{ entryFilterLabel('status') }}</span>
+                <span class="filter-select-chevron">{{ entryFilterMenus.status ? '▴' : '▾' }}</span>
+              </button>
+              <div class="filter-select-menu" v-if="entryFilterMenus.status">
+                <button type="button" class="filter-select-option" v-for="option in entryFilterOptions('status')" :key="'status-' + option.value" @click="setEntryFilter('status', option.value)">
+                  <span class="filter-select-check" :class="{ 'filter-select-check-active': isEntryFilterActive('status', option.value) }">
+                    {{ isEntryFilterActive('status', option.value) ? '✓' : '' }}
+                  </span>
+                  <span>{{ option.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="entries-filter-group">
+              <span class="entries-filter-label">Ciclo</span>
+              <button type="button" class="filter-select-trigger" @click="toggleEntryFilterMenu('cycle')">
+                <span>{{ entryFilterLabel('cycle') }}</span>
+                <span class="filter-select-chevron">{{ entryFilterMenus.cycle ? '▴' : '▾' }}</span>
+              </button>
+              <div class="filter-select-menu" v-if="entryFilterMenus.cycle">
+                <button type="button" class="filter-select-option" v-for="option in entryFilterOptions('cycle')" :key="'cycle-' + option.value" @click="setEntryFilter('cycle', option.value)">
+                  <span class="filter-select-check" :class="{ 'filter-select-check-active': isEntryFilterActive('cycle', option.value) }">
+                    {{ isEntryFilterActive('cycle', option.value) ? '✓' : '' }}
+                  </span>
+                  <span>{{ option.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="entries-filter-group">
+              <span class="entries-filter-label">Tipo</span>
+              <button type="button" class="filter-select-trigger" @click="toggleEntryFilterMenu('type')">
+                <span>{{ entryFilterLabel('type') }}</span>
+                <span class="filter-select-chevron">{{ entryFilterMenus.type ? '▴' : '▾' }}</span>
+              </button>
+              <div class="filter-select-menu" v-if="entryFilterMenus.type">
+                <button type="button" class="filter-select-option" v-for="option in entryFilterOptions('type')" :key="'type-' + option.value" @click="setEntryFilter('type', option.value)">
+                  <span class="filter-select-check" :class="{ 'filter-select-check-active': isEntryFilterActive('type', option.value) }">
+                    {{ isEntryFilterActive('type', option.value) ? '✓' : '' }}
+                  </span>
+                  <span>{{ option.label }}</span>
+                </button>
+              </div>
+            </div>
+
+            <button type="button" class="ghost-button entries-filter-clear" @click="clearEntryFilters">
+              Limpar Filtros
+            </button>
+          </div>
+
+          <div class="entries-save-bar" v-if="month && month.entries.length">
+            <div>
+              <strong>Salvar Alterações dos Lançamentos</strong>
+              <p class="expense-meta">
+                {{ pendingEntryChanges.length
+                  ? pendingEntryChanges.length + ' Alteração(ões) Pendente(s) para salvar.'
+                  : 'Nenhuma Alteração Pendente no momento.' }}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="entries-save-button"
+              @click="saveAllEntries"
+              :disabled="!pendingEntryChanges.length || savingAllEntries"
+            >
+              {{ savingAllEntries ? 'Salvando Alterações...' : 'Salvar Tudo' }}
+            </button>
           </div>
 
           <div class="expense-groups">
@@ -465,12 +538,26 @@
               <div class="expense-group-title">
                 <div>
                   <h3>{{ group.title }}</h3>
-                  <p class="expense-meta">{{ group.entries.length }} gasto(s) recorrente(s)</p>
+                  <p class="expense-meta">{{ group.entries.length }} Gasto(s) Recorrente(s)</p>
                 </div>
-                <strong class="expense-group-total">{{ formatCurrency(groupTotal(group.entries)) }}</strong>
+                <div class="expense-group-header-actions">
+                  <div class="expense-group-total-box">
+                    <span>Subtotal</span>
+                    <strong class="expense-group-total">{{ formatCurrency(groupTotal(group.entries)) }}</strong>
+                  </div>
+                  <button
+                    type="button"
+                    class="collapse-button"
+                    @click="toggleEntryGroup(group.cycle)"
+                    :aria-expanded="String(!isEntryGroupCollapsed(group.cycle))"
+                    :aria-label="isEntryGroupCollapsed(group.cycle) ? 'Expandir grupo' : 'Recolher grupo'"
+                  >
+                    <span class="collapse-arrow">{{ isEntryGroupCollapsed(group.cycle) ? '▾' : '▴' }}</span>
+                  </button>
+                </div>
               </div>
 
-              <div class="expense-grid" v-if="group.entries.length">
+              <div class="expense-grid" v-if="group.entries.length && !isEntryGroupCollapsed(group.cycle)">
                 <article class="expense-card expense-card-elevated" v-for="entry in group.entries" :key="entry.id">
                   <div class="expense-main">
                     <div>
@@ -487,7 +574,29 @@
                         {{ entry.paymentMethod || 'Sem forma de pagamento' }}
                       </p>
                     </div>
-                    <strong class="expense-amount">{{ formatCurrency(entry.amount) }}</strong>
+                    <div class="expense-card-side">
+                      <div class="expense-order-controls">
+                        <button
+                          type="button"
+                          class="icon-button"
+                          @click="moveEntry(entry, -1)"
+                          :disabled="!canMoveEntry(entry, -1)"
+                          aria-label="Subir lançamento"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          class="icon-button"
+                          @click="moveEntry(entry, 1)"
+                          :disabled="!canMoveEntry(entry, 1)"
+                          aria-label="Descer lançamento"
+                        >
+                          ↓
+                        </button>
+                      </div>
+                      <strong class="expense-amount">{{ formatCurrency(entry.amount) }}</strong>
+                    </div>
                   </div>
 
                   <div class="expense-actions">
@@ -504,7 +613,7 @@
 
                     <label>
                       Pagar na
-                      <select v-model="entry.cycle">
+                      <select :value="entry.cycle" @change="updateEntryCycle(entry, $event.target.value)">
                         <option value="Inicio Do Mes">Início do mês</option>
                         <option value="Quinzena">Quinzena</option>
                       </select>
@@ -518,10 +627,6 @@
                         <option value="saved">Guardado</option>
                       </select>
                     </label>
-
-                    <button type="button" class="expense-save-button" @click="saveEntry(entry)" :disabled="savingEntries[entry.id]">
-                      {{ savingEntries[entry.id] ? 'Salvando...' : 'Salvar' }}
-                    </button>
                   </div>
 
                   <div class="expense-secondary-actions">
@@ -535,7 +640,10 @@
                 </article>
               </div>
 
-              <div class="empty-state" v-if="!group.entries.length">Nenhum gasto cadastrado para este ciclo.</div>
+              <div class="empty-state" v-if="!group.entries.length">Nenhum Gasto Cadastrado para este Ciclo.</div>
+              <div class="expense-group-collapsed-note" v-else-if="isEntryGroupCollapsed(group.cycle)">
+                Grupo Recolhido. Clique na Seta para Expandir.
+              </div>
             </section>
           </div>
         </section>
@@ -713,6 +821,83 @@
                 <span>valor somado</span>
               </div>
             </div>
+          </div>
+
+          <div v-if="detailCards.length" class="details-chart-section">
+            <section class="details-chart-grid">
+              <article class="chart-card">
+                <div class="chart-card-heading">
+                  <div>
+                    <p class="section-kicker">Status</p>
+                    <h3>Distribuição dos lançamentos</h3>
+                  </div>
+                </div>
+                <div class="chart-list">
+                  <div v-for="item in detailCharts.statuses" :key="'status-' + item.key" class="chart-row">
+                    <div class="chart-row-header">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.count }} item(ns)</span>
+                    </div>
+                    <div class="chart-bar-track">
+                      <span class="chart-bar-fill" :style="{ width: item.percent + '%' }"></span>
+                    </div>
+                    <div class="chart-row-footer">
+                      <span>{{ item.percent }}%</span>
+                      <strong>{{ formatCurrency(item.amount) }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="chart-card">
+                <div class="chart-card-heading">
+                  <div>
+                    <p class="section-kicker">Ciclos</p>
+                    <h3>Onde o mês pesa mais</h3>
+                  </div>
+                </div>
+                <div class="chart-list">
+                  <div v-for="item in detailCharts.cycles" :key="'cycle-' + item.key" class="chart-row">
+                    <div class="chart-row-header">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.count }} item(ns)</span>
+                    </div>
+                    <div class="chart-bar-track">
+                      <span class="chart-bar-fill chart-bar-fill-alt" :style="{ width: item.percent + '%' }"></span>
+                    </div>
+                    <div class="chart-row-footer">
+                      <span>{{ item.percent }}%</span>
+                      <strong>{{ formatCurrency(item.amount) }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <article class="chart-card chart-card-wide">
+                <div class="chart-card-heading">
+                  <div>
+                    <p class="section-kicker">Pagamento</p>
+                    <h3>Formas de pagamento mais usadas</h3>
+                  </div>
+                </div>
+                <div class="chart-list">
+                  <div v-for="item in detailCharts.paymentMethods" :key="'payment-' + item.key" class="chart-row">
+                    <div class="chart-row-header">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.count }} item(ns)</span>
+                    </div>
+                    <div class="chart-bar-track">
+                      <span class="chart-bar-fill chart-bar-fill-soft" :style="{ width: item.percent + '%' }"></span>
+                    </div>
+                    <div class="chart-row-footer">
+                      <span>{{ item.percent }}%</span>
+                      <strong>{{ formatCurrency(item.amount) }}</strong>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </section>
+
           </div>
 
           <div v-if="detailCards.length" class="modal-template-grid page-detail-grid">
