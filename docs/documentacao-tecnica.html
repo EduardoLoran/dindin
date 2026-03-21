@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentacao Tecnica - Dindin</title>
+  <style>
+    :root {
+      --ink: #18233d;
+      --muted: #5f6f97;
+      --line: #d8e1f4;
+      --panel: #f7faff;
+      --accent: #496dff;
+      --accent-soft: #eef2ff;
+      --ok: #0c7b59;
+      --warn: #9c5f10;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background: #ffffff;
+      line-height: 1.55;
+    }
+
+    .page {
+      width: 210mm;
+      margin: 0 auto;
+      padding: 18mm 16mm 20mm;
+    }
+
+    h1, h2, h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      margin: 0 0 10px;
+      line-height: 1.15;
+    }
+
+    h1 { font-size: 28px; }
+    h2 {
+      margin-top: 26px;
+      font-size: 20px;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 8px;
+    }
+    h3 {
+      margin-top: 18px;
+      font-size: 15px;
+    }
+
+    p, li { font-size: 12.5px; }
+    p { margin: 0 0 10px; }
+    ul { margin: 8px 0 12px 18px; padding: 0; }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f3f6fc;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-size: 11.5px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.5fr 0.9fr;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .hero-card,
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 11.5px;
+    }
+
+    .table th,
+    .table td {
+      border: 1px solid var(--line);
+      padding: 8px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .table th {
+      background: var(--accent-soft);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 700;
+      margin-right: 6px;
+      margin-bottom: 4px;
+    }
+
+    .note {
+      border-left: 4px solid var(--accent);
+      background: #f8faff;
+      padding: 10px 12px;
+      margin: 10px 0;
+    }
+
+    .warn {
+      border-left-color: var(--warn);
+    }
+
+    .ok {
+      border-left-color: var(--ok);
+    }
+
+    .diagram {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: #fbfcff;
+    }
+
+    .small { font-size: 11px; color: var(--muted); }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    @media print {
+      .page { margin: 0; }
+      h2, .panel, .hero-card, .diagram { break-inside: avoid; }
+      .grid-2 { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Dindin</p>
+        <h1>Documentacao tecnica para manutencao</h1>
+        <p>Este documento descreve a arquitetura atual do sistema, modelo de dados, regras de negocio, fluxos principais da API e orientacoes praticas para manutencao evolutiva e corretiva.</p>
+        <p class="meta">Versao do documento: 2026-03-21</p>
+      </div>
+      <aside class="hero-card">
+        <p class="eyebrow">Resumo</p>
+        <p><strong>Stack:</strong> Vue 3 via CDN, Node.js sem framework, SQLite local.</p>
+        <p><strong>Entrada HTTP:</strong> <code>server.js</code> -> <code>src/server.js</code></p>
+        <p><strong>Persistencia:</strong> <code>data/gastos.sqlite</code></p>
+        <p><strong>Modelo:</strong> multiusuario local, sessao em memoria, API REST simples.</p>
+      </aside>
+    </section>
+
+    <h2>1. Objetivo do sistema</h2>
+    <p>O Dindin e uma aplicacao local de controle financeiro mensal focada em contas recorrentes. O sistema permite manter um cadastro de gastos, materializar esses gastos em cada mes salvo, editar valores e status por mes e acompanhar o historico de cada usuario.</p>
+
+    <h2>2. Arquitetura geral</h2>
+    <div class="grid-2">
+      <section class="panel">
+        <h3>Camadas do backend</h3>
+        <ul>
+          <li><code>src/server.js</code>: inicializa schema, sobe o servidor HTTP e distribui entre API e arquivos estaticos.</li>
+          <li><code>src/api/handleApi.js</code>: roteamento manual das rotas REST e orquestracao dos casos de uso.</li>
+          <li><code>src/services/*</code>: regras de dominio e fluxos compostos, como bootstrap, meses, e-mail e sessao.</li>
+          <li><code>src/repositories/*</code>: acesso SQL organizado por agregado.</li>
+          <li><code>src/db/*</code>: conexao SQLite e inicializacao/migracao de schema.</li>
+          <li><code>src/lib/*</code>: validacoes, serializacao, utilitarios HTTP, conversoes e seguranca.</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>Camadas do frontend</h3>
+        <ul>
+          <li><code>public/index.html</code>: shell da pagina e template do app Vue.</li>
+          <li><code>public/app.js</code>: estado, metodos e fluxo de navegacao da SPA.</li>
+          <li><code>public/styles.css</code>: estilo global, responsividade e temas claro/escuro.</li>
+          <li>Sem build step. O Vue 3 e carregado via CDN.</li>
+        </ul>
+      </section>
+    </div>
+
+    <h2>3. Estrutura de diretorios</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Caminho</th>
+          <th>Responsabilidade</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>server.js</code></td><td>Ponto de entrada fino que delega para <code>src/server.js</code>.</td></tr>
+        <tr><td><code>src/api</code></td><td>Roteamento HTTP da API.</td></tr>
+        <tr><td><code>src/db</code></td><td>Conexao SQLite, schema e transacoes.</td></tr>
+        <tr><td><code>src/repositories</code></td><td>Consultas e comandos SQL por entidade.</td></tr>
+        <tr><td><code>src/services</code></td><td>Casos de uso compostos e regras de negocio.</td></tr>
+        <tr><td><code>src/lib</code></td><td>Funcoes utilitarias compartilhadas.</td></tr>
+        <tr><td><code>public</code></td><td>Frontend estatico servido pelo backend.</td></tr>
+        <tr><td><code>data/gastos.sqlite</code></td><td>Banco local persistido em arquivo.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>4. Modelo de dados (UML / ER)</h2>
+    <p>O banco trabalha com cinco entidades principais. A relacao central e: um <code>user</code> possui muitos <code>months</code>, <code>templates</code> e <code>entries</code>. Os <code>templates</code> servem de base para gerar <code>entries</code> por mes.</p>
+    <div class="diagram">
+      <svg viewBox="0 0 1000 690" width="100%" xmlns="http://www.w3.org/2000/svg" aria-label="Diagrama UML do banco">
+        <defs>
+          <style>
+            .box { fill:#ffffff; stroke:#cfdaf3; stroke-width:2; rx:14; ry:14; }
+            .title { fill:#496dff; font:700 18px Segoe UI, Arial, sans-serif; }
+            .txt { fill:#263554; font:12px Segoe UI, Arial, sans-serif; }
+            .muted { fill:#6a7a9f; font:11px Segoe UI, Arial, sans-serif; }
+            .line { stroke:#7f96e8; stroke-width:2.2; marker-end:url(#arrow); fill:none; }
+          </style>
+          <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L9,3 z" fill="#7f96e8"/>
+          </marker>
+        </defs>
+
+        <rect class="box" x="30" y="25" width="280" height="180"/>
+        <text class="title" x="50" y="52">users</text>
+        <text class="txt" x="50" y="82">PK id : TEXT</text>
+        <text class="txt" x="50" y="102">username : TEXT UNIQUE</text>
+        <text class="txt" x="50" y="122">email : TEXT UNIQUE</text>
+        <text class="txt" x="50" y="142">display_name : TEXT</text>
+        <text class="txt" x="50" y="162">avatar_data_url : TEXT</text>
+        <text class="txt" x="50" y="182">is_admin : INTEGER</text>
+        <text class="txt" x="50" y="202">last_login_at, password_salt, password_hash, created_at</text>
+
+        <rect class="box" x="360" y="25" width="280" height="160"/>
+        <text class="title" x="380" y="52">months</text>
+        <text class="txt" x="380" y="82">PK id : TEXT</text>
+        <text class="txt" x="380" y="102">FK user_id -> users.id</text>
+        <text class="txt" x="380" y="122">month_key : TEXT</text>
+        <text class="txt" x="380" y="142">salary_cents : INTEGER</text>
+        <text class="txt" x="380" y="162">salary_defined : INTEGER</text>
+        <text class="txt" x="380" y="182">created_at, rolled_over_from</text>
+        <text class="muted" x="380" y="204">UNIQUE(user_id, month_key)</text>
+
+        <rect class="box" x="690" y="25" width="280" height="175"/>
+        <text class="title" x="710" y="52">templates</text>
+        <text class="txt" x="710" y="82">PK id : TEXT</text>
+        <text class="txt" x="710" y="102">FK user_id -> users.id</text>
+        <text class="txt" x="710" y="122">name, default_amount_cents</text>
+        <text class="txt" x="710" y="142">cycle, payment_method, observation</text>
+        <text class="txt" x="710" y="162">start_month, is_variable</text>
+        <text class="txt" x="710" y="182">active, sort_order, created_at</text>
+
+        <rect class="box" x="360" y="280" width="300" height="215"/>
+        <text class="title" x="380" y="307">entries</text>
+        <text class="txt" x="380" y="337">PK id : TEXT</text>
+        <text class="txt" x="380" y="357">FK (user_id, month_key) -> months</text>
+        <text class="txt" x="380" y="377">FK template_id -> templates.id</text>
+        <text class="txt" x="380" y="397">name, amount_cents, cycle</text>
+        <text class="txt" x="380" y="417">payment_method, observation</text>
+        <text class="txt" x="380" y="437">status, is_variable</text>
+        <text class="txt" x="380" y="457">created_at, updated_at</text>
+        <text class="muted" x="380" y="479">Indice unico parcial: (user_id, month_key, template_id)</text>
+
+        <rect class="box" x="30" y="320" width="280" height="150"/>
+        <text class="title" x="50" y="347">password_reset_tokens</text>
+        <text class="txt" x="50" y="377">PK id : TEXT</text>
+        <text class="txt" x="50" y="397">FK user_id -> users.id</text>
+        <text class="txt" x="50" y="417">token_hash : TEXT UNIQUE</text>
+        <text class="txt" x="50" y="437">expires_at, used_at, created_at</text>
+
+        <path class="line" d="M310 105 L360 105"/>
+        <path class="line" d="M640 105 L690 105"/>
+        <path class="line" d="M510 185 L510 280"/>
+        <path class="line" d="M310 390 L360 390"/>
+        <path class="line" d="M830 200 L830 250 L660 250 L660 320"/>
+      </svg>
+      <p class="small">Observacao: o relacionamento de <code>entries</code> com <code>months</code> e composto por <code>(user_id, month_key)</code>. Isso garante isolamento por usuario e por mes.</p>
+    </div>
+
+    <h2>5. Regras de negocio principais</h2>
+    <div class="grid-2">
+      <section class="panel">
+        <h3>Usuarios e autenticacao</h3>
+        <ul>
+          <li>Existe um usuario admin padrao local: <code>admin</code> / <code>admin123</code> se o banco nascer vazio.</li>
+          <li>As sessoes sao mantidas em memoria no processo Node. Reiniciar o servidor invalida todas as sessoes.</li>
+          <li>Senhas sao hashadas com <code>scrypt</code>.</li>
+          <li>Fluxo de redefinicao de senha usa token hash em SQLite, com expiracao de 60 minutos.</li>
+          <li>Deve sempre existir ao menos um administrador.</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>Meses</h3>
+        <ul>
+          <li>O mes e identificado por <code>YYYY-MM</code>.</li>
+          <li>Um mes e persistido quando necessario, principalmente ao salvar salario ou criar cadastro no mes.</li>
+          <li>Ao criar um novo mes salvo, o sistema materializa nele os templates fixos ja validos para aquele periodo.</li>
+          <li>Ao excluir um mes, seus lancamentos tambem sao excluidos.</li>
+          <li>Se um template comecava no mes excluido, o <code>start_month</code> e empurrado para o proximo mes para evitar recriacao indevida.</li>
+        </ul>
+      </section>
+    </div>
+    <div class="grid-2">
+      <section class="panel">
+        <h3>Templates (cadastros)</h3>
+        <ul>
+          <li><strong>Template fixo:</strong> pode ser copiado para meses futuros salvos.</li>
+          <li><strong>Template variavel:</strong> nao e autopropagado para meses futuros se o lancamento ainda nao existir.</li>
+          <li><code>cycle</code> aceita apenas <code>Inicio Do Mes</code> ou <code>Quinzena</code>.</li>
+          <li>Um template pode ser desativado; isso nao remove historico passado fora do mes atual deletado no fluxo da API.</li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h3>Entries (lancamentos)</h3>
+        <ul>
+          <li>Todo entry pertence a um usuario e um mes.</li>
+          <li>Status permitido: <code>pending</code>, <code>paid</code>, <code>saved</code>.</li>
+          <li>Existe deduplicacao defensiva de lancamentos derivados de template.</li>
+          <li>Os valores sao armazenados em centavos para evitar problemas de precisao.</li>
+        </ul>
+      </section>
+    </div>
+
+    <h2>6. Fluxos tecnicos relevantes</h2>
+    <h3>6.1 Bootstrap da aplicacao</h3>
+    <ul>
+      <li>O frontend chama <code>GET /api/session</code> para verificar autenticacao.</li>
+      <li>Quando autenticado, chama <code>GET /api/bootstrap</code> com ou sem <code>?month=YYYY-MM</code>.</li>
+      <li>O backend monta um payload consolidado com usuario, mes ativo, resumo, lista de meses, templates e entries.</li>
+      <li>Se o mes solicitado ja existir, o backend ainda garante que os templates fixos validos estejam materializados naquele mes.</li>
+    </ul>
+
+    <h3>6.2 Criacao de cadastro</h3>
+    <ul>
+      <li>Rota: <code>POST /api/templates</code>.</li>
+      <li>Valida campos, garante a existencia do mes e grava o template.</li>
+      <li>Cria o entry correspondente no mes atual.</li>
+      <li>Se o template for fixo, tambem pode gerar entries em meses futuros ja persistidos.</li>
+    </ul>
+
+    <h3>6.3 Edicao de cadastro</h3>
+    <ul>
+      <li>Rota: <code>PATCH /api/templates/:id</code>.</li>
+      <li>Atualiza atributos do template e sincroniza o entry correspondente no mes selecionado.</li>
+      <li>Se o template ficar invalido para aquele mes por causa do <code>start_month</code>, o entry pode ser removido.</li>
+    </ul>
+
+    <h3>6.4 Exclusao de mes</h3>
+    <ul>
+      <li>Rota: <code>DELETE /api/months/:monthKey</code>.</li>
+      <li>Executa transacao SQLite.</li>
+      <li>Move o <code>start_month</code> dos templates que nasciam naquele mes para o mes seguinte.</li>
+      <li>Remove entries e o proprio mes.</li>
+    </ul>
+
+    <h2>7. Mapa resumido da API</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Rota</th>
+          <th>Metodo</th>
+          <th>Uso</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/api/session</code></td><td>GET</td><td>Verifica sessao atual.</td></tr>
+        <tr><td><code>/api/login</code></td><td>POST</td><td>Autenticacao.</td></tr>
+        <tr><td><code>/api/register</code></td><td>POST</td><td>Cadastro de novo usuario.</td></tr>
+        <tr><td><code>/api/logout</code></td><td>POST</td><td>Encerra sessao.</td></tr>
+        <tr><td><code>/api/bootstrap</code></td><td>GET</td><td>Retorna estado consolidado do app.</td></tr>
+        <tr><td><code>/api/salary</code></td><td>POST</td><td>Salva salario do mes.</td></tr>
+        <tr><td><code>/api/templates</code></td><td>POST</td><td>Cria cadastro.</td></tr>
+        <tr><td><code>/api/templates/:id</code></td><td>PATCH / DELETE</td><td>Edita ou desativa cadastro.</td></tr>
+        <tr><td><code>/api/entries/:id</code></td><td>PATCH / DELETE</td><td>Edita ou exclui lancamento.</td></tr>
+        <tr><td><code>/api/profile</code></td><td>PATCH / POST</td><td>Edita perfil.</td></tr>
+        <tr><td><code>/api/change-password</code></td><td>POST</td><td>Troca senha autenticada.</td></tr>
+        <tr><td><code>/api/password-reset/*</code></td><td>GET / POST</td><td>Fluxo de redefinicao de senha.</td></tr>
+        <tr><td><code>/api/admin/users</code></td><td>GET / POST / PATCH</td><td>Administracao de contas locais.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>8. Convencoes e pontos de manutencao</h2>
+    <div class="note ok">
+      <p><strong>Padrao atual:</strong> manter regras de negocio em <code>services</code>, SQL em <code>repositories</code> e validacoes/com conversoes em <code>lib</code>. Evitar reintroduzir regras diretamente em <code>handleApi.js</code> alem da orquestracao da rota.</p>
+    </div>
+    <ul>
+      <li>Ao adicionar coluna nova, preferir migracao incremental em <code>src/db/schema.js</code> antes de qualquer rebuild destrutivo.</li>
+      <li>Ao criar regra de negocio nova para mes/template/entry, avaliar impacto em <code>buildBootstrapPayload</code> porque o frontend depende fortemente desse payload unico.</li>
+      <li>Ao alterar contratos da API, revisar tambem <code>public/app.js</code>.</li>
+      <li>Como a sessao e em memoria, qualquer estrategia de multi-instancia exigira armazenamento persistente de sessao.</li>
+      <li>Como o frontend usa Vue via CDN e template em HTML, nao ha pipeline de build. Isso simplifica deploy local, mas aumenta a necessidade de disciplina manual em organizacao do codigo.</li>
+    </ul>
+
+    <h2>9. Checklist de manutencao segura</h2>
+    <ul>
+      <li>Subir a aplicacao e testar login/logout.</li>
+      <li>Validar criacao e edicao de cadastro fixo e variavel.</li>
+      <li>Validar edicao de status e valor de lancamento.</li>
+      <li>Testar troca de mes e exclusao de mes.</li>
+      <li>Testar modo admin, alteracao de perfil e troca de senha.</li>
+      <li>Se houver SMTP configurado, testar tambem o reset de senha.</li>
+    </ul>
+
+    <div class="note warn">
+      <p><strong>Limitacoes atuais:</strong> a documentacao reflete o estado do codigo em 2026-03-21. Sessoes em memoria, Vue via CDN e uso de <code>node:sqlite</code> experimental no Node seguem sendo decisoes conscientes de simplicidade para um sistema local.</p>
+    </div>
+
+    <footer class="footer">
+      Documento gerado automaticamente para o projeto Dindin. Finalidade: manutencao tecnica, onboarding e apoio a evolucoes futuras.
+    </footer>
+  </main>
+</body>
+</html>

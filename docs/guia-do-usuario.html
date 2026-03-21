@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Guia do Usuario - Dindin</title>
+  <style>
+    :root {
+      --ink: #18233d;
+      --muted: #64749a;
+      --line: #d8e1f4;
+      --panel: #f7faff;
+      --accent: #496dff;
+      --accent-soft: #eef2ff;
+      --ok: #0c7b59;
+      --warn: #9c5f10;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    .page {
+      width: 210mm;
+      margin: 0 auto;
+      padding: 18mm 16mm 20mm;
+    }
+
+    h1, h2, h3 {
+      font-family: Georgia, "Times New Roman", serif;
+      margin: 0 0 10px;
+      line-height: 1.15;
+    }
+
+    h1 { font-size: 28px; }
+    h2 {
+      margin-top: 24px;
+      font-size: 20px;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 8px;
+    }
+
+    h3 {
+      margin-top: 16px;
+      font-size: 15px;
+    }
+
+    p, li { font-size: 12.5px; }
+    p { margin: 0 0 10px; }
+    ul, ol { margin: 8px 0 12px 20px; padding: 0; }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f3f6fc;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-size: 11.5px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.45fr 0.95fr;
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--accent);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .step {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      break-inside: avoid;
+    }
+
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #f8faff;
+      padding: 10px 12px;
+      margin: 10px 0;
+    }
+
+    .tips {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 11.5px;
+    }
+
+    .table th,
+    .table td {
+      border: 1px solid var(--line);
+      padding: 8px 9px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .table th {
+      background: var(--accent-soft);
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    @media print {
+      .page { margin: 0; }
+      h2, .panel, .step, .callout { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Dindin</p>
+        <h1>Guia do usuario</h1>
+        <p>Este manual foi escrito para ajudar no uso diario do Dindin: entrar no sistema, cadastrar contas, atualizar os lancamentos do mes, consultar detalhes e gerenciar a propria conta.</p>
+        <p class="meta">Versao do documento: 2026-03-21</p>
+      </div>
+      <aside class="panel">
+        <p class="eyebrow">Antes de comecar</p>
+        <p>O Dindin roda localmente no navegador e salva os dados no computador.</p>
+        <p><strong>Endereco padrao:</strong> <code>http://127.0.0.1:3030</code></p>
+        <p><strong>Tema:</strong> o botao no topo alterna entre modo claro e escuro.</p>
+      </aside>
+    </section>
+
+    <h2>1. Como acessar</h2>
+    <ol>
+      <li>Abra o projeto e rode o comando <code>npm start</code>.</li>
+      <li>No navegador, acesse <code>http://127.0.0.1:3030</code>.</li>
+      <li>Entre com seu usuario e senha.</li>
+    </ol>
+    <div class="callout">
+      <p><strong>Administrador inicial:</strong> em instalacoes novas, o sistema pode criar o usuario <code>admin</code> com senha <code>admin123</code>. Recomenda-se alterar essa senha apos o primeiro acesso.</p>
+    </div>
+
+    <h2>2. O que existe no sistema</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Tela</th>
+          <th>Para que serve</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Visao geral</strong></td><td>Mostra os meses salvos, o salario do mes e o resumo financeiro.</td></tr>
+        <tr><td><strong>Cadastros</strong></td><td>Cria os gastos recorrentes que servem de base para os meses.</td></tr>
+        <tr><td><strong>Lancamentos</strong></td><td>Permite atualizar valor, ciclo, status e observacao dos gastos do mes atual.</td></tr>
+        <tr><td><strong>Detalhes</strong></td><td>Mostra todos os gastos materializados no mes selecionado.</td></tr>
+        <tr><td><strong>Conta</strong></td><td>Editar perfil, trocar senha e sair.</td></tr>
+        <tr><td><strong>Administracao</strong></td><td>Apenas para administradores: criar e editar usuarios locais.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. Passo a passo de uso</h2>
+    <section class="step">
+      <h3>3.1 Escolher o mes</h3>
+      <p>Use o seletor de mes no topo da tela. O Dindin sempre trabalha dentro do mes selecionado.</p>
+      <ul>
+        <li>Se o mes ja estiver salvo, seus dados serao exibidos imediatamente.</li>
+        <li>Se o mes ainda nao existir, ele entra em pre-visualizacao e sera gravado quando voce salvar algo nele.</li>
+      </ul>
+    </section>
+
+    <section class="step">
+      <h3>3.2 Informar o salario do mes</h3>
+      <p>Na tela <strong>Visao geral</strong>, preencha o campo <strong>Salario do mes</strong> e clique em <strong>Salvar salario</strong>.</p>
+      <p>Esse valor vale apenas para o mes selecionado.</p>
+    </section>
+
+    <section class="step">
+      <h3>3.3 Criar um cadastro de gasto</h3>
+      <p>Na tela <strong>Cadastros</strong>, informe:</p>
+      <ul>
+        <li><strong>Nome</strong> do gasto</li>
+        <li><strong>Valor</strong></li>
+        <li><strong>Pagar na</strong>: inicio do mes ou quinzena</li>
+        <li><strong>Forma de pagamento</strong></li>
+        <li><strong>Observacao</strong>, se necessario</li>
+        <li><strong>Valor varia todo mes</strong>, se o valor nao for fixo</li>
+      </ul>
+      <p>Ao salvar, o cadastro passa a fazer parte do mes atual.</p>
+    </section>
+
+    <section class="step">
+      <h3>3.4 Atualizar lancamentos do mes</h3>
+      <p>Na tela <strong>Lancamentos</strong>, cada card representa um gasto do mes. Voce pode:</p>
+      <ul>
+        <li>editar o valor daquele mes</li>
+        <li>trocar o ciclo (inicio do mes ou quinzena)</li>
+        <li>alterar o status para <strong>Pendente</strong>, <strong>Pago</strong> ou <strong>Guardado</strong></li>
+        <li>salvar uma observacao</li>
+        <li>excluir o gasto daquele mes</li>
+      </ul>
+    </section>
+
+    <section class="step">
+      <h3>3.5 Consultar detalhes</h3>
+      <p>Na tela <strong>Detalhes</strong>, voce ve todos os gastos gerados para o mes selecionado em formato de leitura. Essa tela e util para conferencia rapida, inclusive em dark mode.</p>
+    </section>
+
+    <section class="step">
+      <h3>3.6 Excluir um mes</h3>
+      <p>Na tela <strong>Visao geral</strong>, use o botao <strong>Excluir mes</strong>.</p>
+      <p>Esse processo remove os lancamentos do mes e o proprio registro do mes. Use com cuidado.</p>
+    </section>
+
+    <h2>4. Como o sistema se comporta</h2>
+    <div class="tips">
+      <section class="panel">
+        <h3>Cadastro fixo</h3>
+        <p>Quando um gasto e fixo, ele pode aparecer automaticamente em meses futuros ja salvos.</p>
+      </section>
+      <section class="panel">
+        <h3>Cadastro variavel</h3>
+        <p>Quando um gasto e marcado como variavel, ele nao e replicado automaticamente para meses futuros que ainda nao tenham o lancamento.</p>
+      </section>
+      <section class="panel">
+        <h3>Historico mensal</h3>
+        <p>Alterar o valor de um lancamento afeta o mes atual, nao os meses anteriores.</p>
+      </section>
+      <section class="panel">
+        <h3>Resumo do mes</h3>
+        <p>Os cards de resumo mostram salario, totais, pendencias e saldo projetado com base no mes selecionado.</p>
+      </section>
+    </div>
+
+    <h2>5. Conta e seguranca</h2>
+    <section class="step">
+      <h3>5.1 Editar perfil</h3>
+      <p>Pelo menu da conta no topo, voce pode alterar o nome de exibicao e a foto de perfil.</p>
+    </section>
+
+    <section class="step">
+      <h3>5.2 Trocar senha</h3>
+      <p>Use a opcao <strong>Trocar senha</strong> no menu da conta.</p>
+    </section>
+
+    <section class="step">
+      <h3>5.3 Esqueci a senha</h3>
+      <p>Na tela de login, clique em <strong>Esqueceu a senha?</strong>.</p>
+      <p>Se o servidor estiver configurado com SMTP, o sistema envia um link de redefinicao valido por 60 minutos.</p>
+    </section>
+
+    <h2>6. Funcao de administrador</h2>
+    <p>Usuarios administradores enxergam a opcao <strong>Administracao</strong> no menu da conta.</p>
+    <ul>
+      <li>Listar usuarios</li>
+      <li>Criar novo usuario</li>
+      <li>Editar nome, usuario, e-mail e permissao de admin</li>
+    </ul>
+
+    <h2>7. Dicas praticas</h2>
+    <ul>
+      <li>Defina primeiro o salario do mes e depois ajuste os lancamentos.</li>
+      <li>Use observacoes para registrar regras, datas de vencimento e lembretes.</li>
+      <li>Use o tema escuro se preferir trabalhar com menos brilho.</li>
+      <li>Ao excluir um mes, revise antes se nao ha informacoes que precisam ser mantidas em historico.</li>
+    </ul>
+
+    <h2>8. Problemas comuns</h2>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Problema</th>
+          <th>O que fazer</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Pagina nao abre</td><td>Confirme que o servidor foi iniciado com <code>npm start</code> e que a porta 3030 nao esta sendo usada por outro processo antigo.</td></tr>
+        <tr><td>Sessao expirou</td><td>Entre novamente. Reiniciar o servidor encerra as sessoes em memoria.</td></tr>
+        <tr><td>Reset de senha nao envia e-mail</td><td>Verifique se o servidor foi configurado com as variaveis SMTP.</td></tr>
+        <tr><td>Mes ainda nao salvo</td><td>Salve salario ou algum cadastro/lancamento no mes para persisti-lo.</td></tr>
+      </tbody>
+    </table>
+
+    <footer class="footer">
+      Documento gerado para apoiar o uso diario do Dindin por usuarios finais e administradores locais.
+    </footer>
+  </main>
+</body>
+</html>
