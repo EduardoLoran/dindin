@@ -805,7 +805,8 @@ h3 {
 }
 
 .entries-panel,
-.details-panel {
+.details-panel,
+.fixed-expenses-panel {
   overflow: hidden;
 }
 
@@ -1666,6 +1667,11 @@ textarea {
   margin-top: 8px;
 }
 
+.fixed-expenses-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  margin-top: 8px;
+}
+
 .detail-card {
   min-height: 100%;
   padding: 18px;
@@ -1676,6 +1682,21 @@ textarea {
 }
 
 :root[data-theme="dark"] .detail-card {
+  background:
+    linear-gradient(180deg, rgba(16, 24, 43, 0.96), rgba(10, 17, 33, 0.88)),
+    linear-gradient(135deg, rgba(120, 215, 255, 0.06), transparent 48%);
+}
+
+.fixed-expense-card {
+  min-height: 100%;
+  padding: 18px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 252, 255, 0.82)),
+    linear-gradient(135deg, rgba(87, 126, 247, 0.05), transparent 48%);
+}
+
+:root[data-theme="dark"] .fixed-expense-card {
   background:
     linear-gradient(180deg, rgba(16, 24, 43, 0.96), rgba(10, 17, 33, 0.88)),
     linear-gradient(135deg, rgba(120, 215, 255, 0.06), transparent 48%);

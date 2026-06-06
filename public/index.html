@@ -274,7 +274,7 @@
 
           <div v-if="!adminMode" class="page-tabs">
             <button
-              v-for="(label, key) in { overview: 'Visão geral', templates: 'Cadastros', entries: 'Lançamentos', details: 'Detalhes' }"
+              v-for="(label, key) in { overview: 'Visão geral', templates: 'Cadastros', entries: 'Lançamentos', details: 'Detalhes', fixedExpenses: 'Gastos fixos' }"
               :key="key"
               type="button"
               class="page-tab"
@@ -949,6 +949,80 @@
             </article>
           </div>
           <div v-if="!detailCards.length" class="empty-state">Nenhum lançamento salvo neste mês.</div>
+        </section>
+
+        <section v-if="activePage === 'fixedExpenses'" class="panel fixed-expenses-panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">Gastos Fixos</p>
+              <h2>Cadastros com valor fixo</h2>
+              <p class="template-meta">Veja os gastos que não variam todo mês e inative os que não precisa mais usar.</p>
+            </div>
+            <div class="entries-panel-summary" v-if="fixedExpenseCards.length">
+              <div class="entries-summary-pill">
+                <strong>{{ fixedExpenseCards.length }}</strong>
+                <span>Gasto(s) Fixo(s)</span>
+              </div>
+              <div class="entries-summary-pill">
+                <strong>{{ formatCurrency(fixedExpenseTotal) }}</strong>
+                <span>Total Fixo</span>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="fixedExpenseCards.length" class="modal-template-grid fixed-expenses-grid">
+            <article class="template-card fixed-expense-card" v-for="template in fixedExpenseCards" :key="'fixed-' + template.id">
+              <div class="template-card-header">
+                <div>
+                  <h3>{{ template.name }}</h3>
+                  <p class="template-meta">{{ cycleDisplayLabel(template.cycle) }} &bull; {{ template.paymentMethod || 'Sem forma de pagamento' }}</p>
+                  <div class="template-badges">
+                    <span class="flag-pill flag-fixed">Fixo</span>
+                    <span class="status-pill status-paid">Ativo</span>
+                  </div>
+                </div>
+                <strong>{{ formatCurrency(template.amount) }}</strong>
+              </div>
+
+              <p class="template-meta">Valendo a partir de {{ formatMonthLabel(template.startMonth) }}</p>
+
+              <div class="template-edit-grid template-readonly-grid">
+                <label>
+                  Valor Fixo
+                  <input :value="formatMoneyInput(template.amount)" type="text" readonly tabindex="-1">
+                </label>
+
+                <label>
+                  Ciclo
+                  <input :value="cycleDisplayLabel(template.cycle)" type="text" readonly tabindex="-1">
+                </label>
+
+                <label>
+                  Pagamento
+                  <input :value="template.paymentMethod || ''" type="text" readonly tabindex="-1">
+                </label>
+              </div>
+
+              <label v-if="template.observation" class="observation-field template-readonly-observation">
+                Observação
+                <textarea :value="template.observation" rows="4" readonly tabindex="-1"></textarea>
+              </label>
+
+              <div class="template-card-actions">
+                <button class="ghost-button observation-button" type="button" @click="openObservationModal(template, 'template')">
+                  Detalhar Observação
+                </button>
+                <button class="ghost-button detail-button" type="button" @click="setPage('templates')">
+                  Editar Cadastro
+                </button>
+                <button class="ghost-button danger-button" type="button" @click="deleteTemplate(template)">
+                  Inativar Gasto Fixo
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div v-if="!fixedExpenseCards.length" class="empty-state">Nenhum Gasto Fixo Ativo encontrado.</div>
         </section>
 
         <section v-if="error" class="panel error-panel">

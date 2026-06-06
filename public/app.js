@@ -24,6 +24,7 @@ const PAGE_LABELS = {
   templates: "Cadastros",
   entries: "Lançamentos",
   details: "Detalhes",
+  fixedExpenses: "Gastos fixos",
   adminUsers: "Usuários (Admin)",
 };
 
@@ -39,6 +40,7 @@ const PRIVATE_ROUTES = {
   templates: "/cadastros",
   entries: "/lancamentos",
   details: "/detalhes",
+  fixedExpenses: "/gastos-fixos",
   adminUsers: "/admin/usuarios",
 };
 
@@ -368,6 +370,21 @@ createApp({
 
     detailTotalAmount() {
       return this.detailCards.reduce((total, item) => total + Number(item.amount || 0), 0);
+    },
+
+    fixedExpenseCards() {
+      return this.templates
+        .filter((template) => !template.isVariable)
+        .sort((left, right) => {
+          if (left.cycle !== right.cycle) {
+            return left.cycle.localeCompare(right.cycle);
+          }
+          return left.name.localeCompare(right.name, "pt-BR", { sensitivity: "base" });
+        });
+    },
+
+    fixedExpenseTotal() {
+      return this.fixedExpenseCards.reduce((total, item) => total + Number(item.amount || 0), 0);
     },
 
     detailCharts() {
