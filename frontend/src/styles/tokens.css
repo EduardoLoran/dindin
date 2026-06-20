@@ -1,0 +1,58 @@
+:root {
+  --color-primary: #7a41c0;
+  --color-primary-hover: #6936a8;
+  --color-secondary: #b180bf;
+  --color-lilac: #c080b4;
+  --color-rose: #bf808e;
+  --color-clay: #bf8780;
+
+  --color-background: #fbf8fc;
+  --color-surface: #ffffff;
+  --color-surface-soft: #f7f1f8;
+  --color-text: #241b2e;
+  --color-text-muted: #786c7e;
+  --color-border: #e7ddea;
+  --color-border-strong: #d7c8dc;
+  --color-danger: #a83e56;
+  --color-danger-soft: #fff0f3;
+  --color-success: #377b63;
+  --color-success-soft: #edf9f4;
+  --color-info-soft: #f4effa;
+  --color-focus: rgba(122, 65, 192, 0.2);
+
+  --brand-panel-start: #f7eef8;
+  --brand-panel-end: #f4e9ef;
+  --brand-ring: rgba(122, 65, 192, 0.08);
+  --brand-wave: rgba(122, 65, 192, 0.16);
+  --shadow-button: 0 12px 28px rgba(105, 54, 168, 0.22);
+  --shadow-field: 0 10px 28px rgba(61, 39, 70, 0.05);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --transition-fast: 160ms ease;
+  --transition-base: 240ms ease;
+}
+
+:root[data-theme="dark"] {
+  --color-background: #17121c;
+  --color-surface: #211927;
+  --color-surface-soft: #291f30;
+  --color-text: #f8f3fa;
+  --color-text-muted: #b9aabd;
+  --color-border: #3a2c40;
+  --color-border-strong: #4d3a55;
+  --color-danger: #f0a0b0;
+  --color-danger-soft: #3b202a;
+  --color-success: #9ed3be;
+  --color-success-soft: #1d332c;
+  --color-info-soft: #30233b;
+  --color-focus: rgba(192, 128, 180, 0.24);
+
+  --brand-panel-start: #211326;
+  --brand-panel-end: #2b1827;
+  --brand-ring: rgba(192, 128, 180, 0.09);
+  --brand-wave: rgba(192, 128, 180, 0.18);
+  --shadow-button: 0 14px 34px rgba(0, 0, 0, 0.3);
+  --shadow-field: none;
+}

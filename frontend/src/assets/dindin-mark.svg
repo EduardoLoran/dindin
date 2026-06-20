@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="dindin-mark-title">
+  <title id="dindin-mark-title">Símbolo do Dindin</title>
+  <defs>
+    <linearGradient id="dindin-mark-gradient" x1="28" y1="20" x2="132" y2="140" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C080B4"/>
+      <stop offset="0.5" stop-color="#7A41C0"/>
+      <stop offset="1" stop-color="#BF808E"/>
+    </linearGradient>
+    <mask id="dindin-mark-mask">
+      <rect x="100" y="14" width="24" height="91" rx="12" fill="white"/>
+      <circle cx="77" cy="102" r="45" fill="white"/>
+      <circle cx="77" cy="102" r="17" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="160" height="160" fill="url(#dindin-mark-gradient)" mask="url(#dindin-mark-mask)"/>
+</svg>

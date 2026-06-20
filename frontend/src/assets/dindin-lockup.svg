@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 160" role="img" aria-labelledby="dindin-lockup-title">
+  <title id="dindin-lockup-title">Dindin</title>
+  <defs>
+    <linearGradient id="dindin-lockup-gradient" x1="20" y1="18" x2="142" y2="148" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C080B4"/>
+      <stop offset="0.5" stop-color="#7A41C0"/>
+      <stop offset="1" stop-color="#BF808E"/>
+    </linearGradient>
+    <mask id="dindin-lockup-mask">
+      <rect x="100" y="14" width="24" height="91" rx="12" fill="white"/>
+      <circle cx="77" cy="102" r="45" fill="white"/>
+      <circle cx="77" cy="102" r="17" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="160" height="160" fill="url(#dindin-lockup-gradient)" mask="url(#dindin-lockup-mask)"/>
+  <text x="151" y="111" fill="#241B2E" font-family="Manrope, Arial, sans-serif" font-size="76" font-weight="750" letter-spacing="-5">dindin</text>
+</svg>

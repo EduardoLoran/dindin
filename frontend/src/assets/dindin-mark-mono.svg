@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-labelledby="dindin-mark-mono-title">
+  <title id="dindin-mark-mono-title">Símbolo monocromático do Dindin</title>
+  <defs>
+    <mask id="dindin-mark-mono-mask">
+      <rect x="100" y="14" width="24" height="91" rx="12" fill="white"/>
+      <circle cx="77" cy="102" r="45" fill="white"/>
+      <circle cx="77" cy="102" r="17" fill="black"/>
+    </mask>
+  </defs>
+  <rect width="160" height="160" fill="currentColor" mask="url(#dindin-mark-mono-mask)"/>
+</svg>

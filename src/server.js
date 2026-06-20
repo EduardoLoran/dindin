@@ -6,12 +6,39 @@ const { sendJson, serveStatic } = require("./lib/http");
 
 initializeDatabase();
 
+const PUBLIC_AUTH_ROUTES = new Set([
+  "/",
+  "/login",
+  "/cadastro",
+  "/esqueci-senha",
+  "/redefinir-senha",
+  "/visao-geral",
+  "/cadastros",
+  "/lancamentos",
+  "/detalhes",
+  "/gastos-fixos",
+  "/admin/usuarios",
+]);
+
+function normalizeRoutePath(pathname) {
+  if (pathname === "/") {
+    return pathname;
+  }
+
+  return pathname.replace(/\/+$/, "");
+}
+
 const server = http.createServer(async (request, response) => {
   try {
     const url = new URL(request.url, `http://${request.headers.host}`);
 
     if (url.pathname.startsWith("/api/")) {
       await handleApi(request, response, url);
+      return;
+    }
+
+    if (PUBLIC_AUTH_ROUTES.has(normalizeRoutePath(url.pathname))) {
+      serveStatic(response, "/auth-app/index.html");
       return;
     }
 

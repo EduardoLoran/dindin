@@ -1,55 +1,44 @@
 # Dindin
 
-Aplicacao local para transformar sua planilha em um sistema mais realista, com:
+Aplicacao de controle financeiro pessoal com backend Node.js, banco SQLite e frontend Vue.
 
-- frontend web em Vue
-- backend local em Node
-- banco SQLite em arquivo
-- historico mensal persistido
-- virada automatica do mes
+## Executar
 
-## Estrutura
-
-- [`server.js`](C:\codex\server.js): servidor HTTP local + API + SQLite
-- [`public/index.html`](C:\codex\public\index.html): casca HTML da interface
-- [`public/app.js`](C:\codex\public\app.js): app Vue consumindo a API
-- [`public/styles.css`](C:\codex\public\styles.css): estilos da interface
-- `data/gastos.sqlite`: banco gerado automaticamente ao iniciar
-
-## Como rodar
-
-1. No diretorio [`C:\codex`](C:\codex), execute:
+Na primeira execucao, instale as dependencias do frontend e gere o build:
 
 ```powershell
+cd frontend
+npm install
+cd ..
+npm run build
 npm start
 ```
 
-2. Abra no navegador:
+A aplicacao estara disponivel em `http://127.0.0.1:3030`.
 
-```text
-http://127.0.0.1:3030
+## Desenvolvimento do frontend
+
+Com o backend executando em um terminal, inicie o Vite em outro:
+
+```powershell
+npm run dev:frontend
 ```
 
-## O que esta primeira versao faz
+O Vite usa proxy para as APIs em `http://127.0.0.1:3030`.
 
-- Cria o schema do SQLite automaticamente.
-- Importa como base inicial os gastos fixos da sua planilha.
-- Cria um mes automaticamente quando ele ainda nao existe.
-- Salva salario por mes.
-- Salva status e valor dos gastos daquele mes.
-- Guarda historico por `YYYY-MM`.
-- Permite recriar um mes a partir do cadastro fixo.
+## Estrutura atual
 
-## Observacoes
+- `server.js` e `src/`: servidor HTTP, APIs, servicos, repositorios e SQLite.
+- `frontend/`: novo frontend Vue 3 + Vite para autenticacao e telas internas migradas.
+- `public/auth-app/`: build gerado do novo frontend.
+- `public/index.html`, `public/app.js` e `public/styles.css`: telas autenticadas legadas.
+- `data/gastos.sqlite`: banco local.
+- `docs/identidade-visual-login.md`: tokens, logo e regras da nova identidade.
+- `docs/interface-cadastros.md`: estrutura, regras e componentes da nova tela de cadastros.
+- `docs/interfaces-internas.md`: regras e arquitetura das telas internas migradas.
 
-- O frontend usa Vue 3 via CDN para manter a base simples, sem etapa de build.
-- O SQLite usado e o `node:sqlite`, nativo do Node 24.
-- Esse modulo ainda aparece como experimental no Node atual, embora funcione para um MVP local.
+## Migracao incremental
 
-## Proximos passos naturais
+As rotas publicas e todas as areas autenticadas (`/visao-geral`, `/cadastros`, `/lancamentos`, `/detalhes`, `/gastos-fixos` e `/admin/usuarios`) usam o frontend Vue 3 + Vite. Os arquivos legados permanecem temporariamente no projeto apenas como referencia durante a consolidacao da migracao.
 
-- editar ou desativar um gasto fixo existente
-- registrar gastos variaveis fora da base fixa
-- anexar comprovante ou observacao por lancamento
-- importar extrato do banco e conciliar com os gastos previstos
-- trocar Vue via CDN por Vite se quisermos uma base maior depois
+O projeto usa `node:sqlite`, disponivel no Node.js 24 utilizado no ambiente atual.
