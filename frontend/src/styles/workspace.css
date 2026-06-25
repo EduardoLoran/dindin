@@ -22,6 +22,18 @@
 .month-select__options li small { color: var(--color-text-muted); font-size: 0.54rem; }
 .month-select__check { display: grid; width: 25px; height: 25px; flex: 0 0 auto; color: #fff; background: var(--color-primary); border-radius: 8px; place-items: center; }
 .month-select__check:empty { background: transparent; }
+.dashboard-hero .month-select,
+.workspace-hero .month-select,
+.templates-hero__actions .month-select { width: min(100%, 245px); }
+.dashboard-hero .month-select > label,
+.workspace-hero .month-select > label,
+.templates-hero__actions .month-select > label { display: none; }
+.dashboard-hero .month-select__button,
+.workspace-hero .month-select__button,
+.templates-hero__actions .month-select__button { min-height: 50px; border-radius: 15px; }
+.dashboard-hero .month-select__icon,
+.workspace-hero .month-select__icon,
+.templates-hero__actions .month-select__icon { width: 37px; height: 37px; }
 .workspace-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; margin-bottom: 28px; }
 .workspace-hero h1 { margin: 0; color: var(--color-text); font-size: clamp(1.85rem, 3vw, 2.8rem); letter-spacing: -0.05em; line-height: 1.1; }
 .workspace-hero > div:first-child > p:last-child { max-width: 680px; margin: 10px 0 0; color: var(--color-text-muted); font-size: 0.9rem; }
@@ -121,6 +133,8 @@
 .table-note { display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fixed-dynamic-table { min-width: 950px; }
 .entries-dynamic-table { min-width: 900px; }
+.details-dynamic-table { min-width: 1050px; }
+.details-filter-total { color: var(--color-primary); font-size: 0.88rem; }
 .entries-workspace.has-save-dock { padding-bottom: 112px; }
 .entries-save-dock { position: fixed; z-index: 55; right: 24px; bottom: 22px; display: flex; width: min(560px, calc(100vw - 48px)); min-height: 72px; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 13px 12px 15px; background: color-mix(in srgb, var(--color-surface) 94%, var(--color-secondary)); border: 1px solid color-mix(in srgb, var(--color-primary) 28%, var(--color-border)); border-radius: 17px; box-shadow: 0 22px 60px rgba(31, 18, 38, 0.25); backdrop-filter: blur(18px); }
 .entries-save-dock__status { display: flex; min-width: 0; align-items: center; gap: 11px; }

@@ -1,21 +1,21 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
-import MonthSelector from "../components/MonthSelector.vue";
 import SalaryDialog from "../components/SalaryDialog.vue";
 import SummaryCard from "../components/SummaryCard.vue";
 import { getDashboard, updateSalary } from "../api/dashboard";
+import { useGlobalPeriod } from "../composables/useGlobalPeriod";
 import { useSession } from "../composables/useSession";
 import { formatCompactDate, formatCurrency, formatMonth } from "../utils/formatters";
 
 const router = useRouter();
 const { user } = useSession();
+const { selectedMonth, setSelectedMonth } = useGlobalPeriod();
 const loading = ref(true);
 const refreshing = ref(false);
 const error = ref("");
 const dashboard = ref(null);
-const selectedMonth = ref("");
 const salaryDialogOpen = ref(false);
 const savingSalary = ref(false);
 const salaryError = ref("");
@@ -76,13 +76,13 @@ async function loadDashboard(monthKey = "", { initial = false } = {}) {
   error.value = "";
 
   try {
-    let payload = await getDashboard(monthKey);
+    let payload = await getDashboard(monthKey || selectedMonth.value);
     if (initial) {
       const latestMonth = payload.months?.[0]?.monthKey;
-      if (latestMonth && latestMonth !== payload.activeMonth) payload = await getDashboard(latestMonth);
+      if (!selectedMonth.value && latestMonth && latestMonth !== payload.activeMonth) payload = await getDashboard(latestMonth);
     }
     dashboard.value = payload;
-    selectedMonth.value = payload.activeMonth;
+    setSelectedMonth(payload.activeMonth);
   } catch (loadError) {
     if (loadError.status === 401) {
       await router.replace({ name: "login" });
@@ -104,6 +104,7 @@ async function saveSalary(value) {
   savingSalary.value = true;
   try {
     dashboard.value = await updateSalary(selectedMonth.value, value);
+    setSelectedMonth(dashboard.value.activeMonth);
     salaryDialogOpen.value = false;
   } catch (saveError) {
     salaryError.value = saveError.message;
@@ -113,6 +114,14 @@ async function saveSalary(value) {
 }
 
 onMounted(() => loadDashboard("", { initial: true }));
+
+async function handleGlobalPeriodChange(event) {
+  const monthKey = event.detail?.monthKey;
+  if (monthKey && monthKey !== dashboard.value?.activeMonth) await loadDashboard(monthKey);
+}
+
+onMounted(() => window.addEventListener("dindin-period-change", handleGlobalPeriodChange));
+onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleGlobalPeriodChange));
 </script>
 
 <template>
@@ -135,7 +144,6 @@ onMounted(() => loadDashboard("", { initial: true }));
           <h1>Seu dinheiro em uma visão simples.</h1>
           <p>Acompanhe o mês, priorize pendências e tome decisões com tranquilidade.</p>
         </div>
-        <MonthSelector :model-value="selectedMonth" :months="dashboard?.months || []" :disabled="refreshing" label="Período" @change="changeMonth" />
       </header>
 
       <div v-if="refreshing" class="dashboard-refreshing" role="status"><span></span>Atualizando período...</div>
@@ -176,7 +184,7 @@ onMounted(() => loadDashboard("", { initial: true }));
 
         <aside class="dashboard-side-stack">
           <article class="dashboard-panel quick-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Atalhos</p><h2>Acesso rápido</h2></div></div><RouterLink to="/cadastros"><span><AppIcon name="templates" /></span><div><strong>Novo cadastro</strong><small>Organize um gasto recorrente</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink><RouterLink to="/lancamentos"><span><AppIcon name="entries" /></span><div><strong>Revisar lançamentos</strong><small>Atualize valores e status</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink><RouterLink to="/detalhes"><span><AppIcon name="details" /></span><div><strong>Explorar detalhes</strong><small>Analise a composição do mês</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink></article>
-          <article class="dashboard-panel history-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Histórico</p><h2>Meses recentes</h2></div></div><div v-if="dashboard?.months?.length" class="history-list"><button v-for="savedMonth in dashboard.months.slice(0, 3)" :key="savedMonth.monthKey" type="button" :class="{ 'is-active': savedMonth.monthKey === selectedMonth }" @click="loadDashboard(savedMonth.monthKey)"><span><strong>{{ formatMonth(savedMonth.monthKey) }}</strong><small>Criado em {{ formatCompactDate(savedMonth.createdAt) }}</small></span><b>{{ formatCurrency(savedMonth.salary) }}</b></button></div><p v-else class="history-empty">O histórico aparecerá quando você salvar seu primeiro mês.</p></article>
+          <article class="dashboard-panel history-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Histórico</p><h2>Meses recentes</h2></div></div><div v-if="dashboard?.months?.length" class="history-list"><button v-for="savedMonth in dashboard.months.slice(0, 3)" :key="savedMonth.monthKey" type="button" :class="{ 'is-active': savedMonth.monthKey === selectedMonth }" @click="changeMonth(savedMonth.monthKey)"><span><strong>{{ formatMonth(savedMonth.monthKey) }}</strong><small>Criado em {{ formatCompactDate(savedMonth.createdAt) }}</small></span><b>{{ formatCurrency(savedMonth.salary) }}</b></button></div><p v-else class="history-empty">O histórico aparecerá quando você salvar seu primeiro mês.</p></article>
         </aside>
       </section>
 

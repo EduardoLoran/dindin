@@ -1,19 +1,33 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Dialog, DialogPanel, Menu, MenuButton, MenuItem, MenuItems, TransitionChild, TransitionRoot } from "@headlessui/vue";
 import AppIcon from "./AppIcon.vue";
 import BrandLogo from "./BrandLogo.vue";
+import MonthSelector from "./MonthSelector.vue";
+import ProfileDialog from "./ProfileDialog.vue";
 import ThemeToggle from "./ThemeToggle.vue";
-import { endSession, useSession } from "../composables/useSession";
+import { changePassword, updateProfile } from "../api/auth";
+import { getDashboard } from "../api/dashboard";
+import { useGlobalPeriod } from "../composables/useGlobalPeriod";
+import { endSession, setAuthenticatedUser, useSession } from "../composables/useSession";
 
 const SIDEBAR_KEY = "dindin-sidebar-collapsed";
 const route = useRoute();
 const router = useRouter();
 const { user } = useSession();
+const { selectedMonth, setSelectedMonth, changeSelectedMonth } = useGlobalPeriod();
 const mobileOpen = ref(false);
 const collapsed = ref(window.localStorage.getItem(SIDEBAR_KEY) === "true");
 const signingOut = ref(false);
+const periodPayload = ref(null);
+const loadingPeriods = ref(false);
+const profileOpen = ref(false);
+const savingProfile = ref(false);
+const savingPassword = ref(false);
+const profileError = ref("");
+const passwordError = ref("");
+const profileNotice = ref("");
 
 const navItems = computed(() => [
   { label: "Visão geral", href: "/visao-geral", icon: "home", modern: true },
@@ -44,6 +58,64 @@ async function signOut() {
     signingOut.value = false;
   }
 }
+
+async function loadPeriods() {
+  loadingPeriods.value = true;
+  try {
+    let payload = await getDashboard(selectedMonth.value);
+    const latestMonth = payload.months?.[0]?.monthKey;
+    if (!selectedMonth.value && latestMonth && latestMonth !== payload.activeMonth) payload = await getDashboard(latestMonth);
+    periodPayload.value = payload;
+    setSelectedMonth(payload.activeMonth);
+  } catch {
+    periodPayload.value = null;
+  } finally {
+    loadingPeriods.value = false;
+  }
+}
+
+function selectGlobalPeriod(monthKey) {
+  changeSelectedMonth(monthKey);
+}
+
+function openProfile() {
+  profileError.value = "";
+  passwordError.value = "";
+  profileNotice.value = "";
+  profileOpen.value = true;
+}
+
+async function saveProfile(profile) {
+  savingProfile.value = true;
+  profileError.value = "";
+  profileNotice.value = "";
+  try {
+    const payload = await updateProfile(profile);
+    setAuthenticatedUser(payload.user);
+    profileNotice.value = "Perfil atualizado com sucesso.";
+  } catch (error) {
+    profileError.value = error.message;
+  } finally {
+    savingProfile.value = false;
+  }
+}
+
+async function savePassword(payload) {
+  savingPassword.value = true;
+  passwordError.value = "";
+  profileNotice.value = "";
+  try {
+    const response = await changePassword(payload);
+    setAuthenticatedUser(response.user);
+    profileNotice.value = response.message || "Senha alterada com sucesso.";
+  } catch (error) {
+    passwordError.value = error.message;
+  } finally {
+    savingPassword.value = false;
+  }
+}
+
+onMounted(loadPeriods);
 </script>
 
 <template>
@@ -80,7 +152,15 @@ async function signOut() {
       <header class="app-topbar">
         <div class="app-topbar__leading">
           <button class="mobile-menu-button" type="button" aria-label="Abrir menu" @click="mobileOpen = true"><AppIcon name="menu" /></button>
-          <div><p>Área financeira</p><strong>{{ route.meta.title || "Dindin" }}</strong></div>
+          <div class="app-topbar__title"><p>Área financeira</p><strong>{{ route.meta.title || "Dindin" }}</strong></div>
+          <MonthSelector
+            class="app-period-select"
+            :model-value="selectedMonth"
+            :months="periodPayload?.months || []"
+            :disabled="loadingPeriods"
+            label="Período"
+            @change="selectGlobalPeriod"
+          />
         </div>
 
         <div class="app-topbar__actions">
@@ -97,6 +177,7 @@ async function signOut() {
             <Transition enter-active-class="menu-transition" enter-from-class="menu-hidden" enter-to-class="menu-visible" leave-active-class="menu-transition" leave-from-class="menu-visible" leave-to-class="menu-hidden">
               <MenuItems class="user-menu__items">
                 <div class="user-menu__summary"><strong>{{ user?.displayName }}</strong><span>{{ user?.email }}</span></div>
+                <MenuItem v-slot="{ active }"><button type="button" :class="{ 'is-active': active }" @click="openProfile"><AppIcon name="user" />Editar perfil</button></MenuItem>
                 <MenuItem v-slot="{ active }"><RouterLink to="/cadastros" :class="{ 'is-active': active }"><AppIcon name="templates" />Abrir cadastros</RouterLink></MenuItem>
                 <MenuItem v-slot="{ active }"><button type="button" :class="{ 'is-active': active }" :disabled="signingOut" @click="signOut"><AppIcon name="logout" />{{ signingOut ? "Saindo..." : "Sair" }}</button></MenuItem>
               </MenuItems>
@@ -107,6 +188,19 @@ async function signOut() {
 
       <main class="app-content"><slot /></main>
     </div>
+
+    <ProfileDialog
+      :open="profileOpen"
+      :user="user"
+      :saving-profile="savingProfile"
+      :saving-password="savingPassword"
+      :profile-error="profileError"
+      :password-error="passwordError"
+      :notice="profileNotice"
+      @close="profileOpen = false"
+      @save-profile="saveProfile"
+      @change-password="savePassword"
+    />
 
     <TransitionRoot :show="mobileOpen" as="template">
       <Dialog class="mobile-sidebar" @close="mobileOpen = false">

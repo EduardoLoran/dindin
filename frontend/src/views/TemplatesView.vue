@@ -1,22 +1,22 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Menu, MenuButton, MenuItem, MenuItems, TransitionRoot } from "@headlessui/vue";
 import { useRouter } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
-import MonthSelector from "../components/MonthSelector.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
 import ObservationDialog from "../components/ObservationDialog.vue";
 import TemplateFormDialog from "../components/TemplateFormDialog.vue";
 import { getDashboard } from "../api/dashboard";
+import { useGlobalPeriod } from "../composables/useGlobalPeriod";
 import { createTemplate, deactivateTemplate, updateTemplate, updateTemplateObservation } from "../api/templates";
 import { formatCurrency, formatMonth } from "../utils/formatters";
 
 const router = useRouter();
+const { selectedMonth, setSelectedMonth } = useGlobalPeriod();
 const loading = ref(true);
 const refreshing = ref(false);
 const error = ref("");
 const payload = ref(null);
-const selectedMonth = ref("");
 const search = ref("");
 const typeFilter = ref("all");
 const cycleFilter = ref("all");
@@ -56,7 +56,7 @@ function showNotice(message) {
 
 function applyPayload(nextPayload) {
   payload.value = nextPayload;
-  selectedMonth.value = nextPayload.activeMonth;
+  setSelectedMonth(nextPayload.activeMonth);
 }
 
 async function loadTemplates(monthKey = "", { initial = false } = {}) {
@@ -64,10 +64,10 @@ async function loadTemplates(monthKey = "", { initial = false } = {}) {
   else refreshing.value = true;
   error.value = "";
   try {
-    let nextPayload = await getDashboard(monthKey);
+    let nextPayload = await getDashboard(monthKey || selectedMonth.value);
     if (initial) {
       const latestMonth = nextPayload.months?.[0]?.monthKey;
-      if (latestMonth && latestMonth !== nextPayload.activeMonth) nextPayload = await getDashboard(latestMonth);
+      if (!selectedMonth.value && latestMonth && latestMonth !== nextPayload.activeMonth) nextPayload = await getDashboard(latestMonth);
     }
     applyPayload(nextPayload);
   } catch (loadError) {
@@ -163,7 +163,16 @@ function clearFilters() {
   paymentFilter.value = "all";
 }
 
-onMounted(() => loadTemplates("", { initial: true }));
+async function handleGlobalPeriodChange(event) {
+  const monthKey = event.detail?.monthKey;
+  if (monthKey && monthKey !== payload.value?.activeMonth) await loadTemplates(monthKey);
+}
+
+onMounted(() => {
+  loadTemplates("", { initial: true });
+  window.addEventListener("dindin-period-change", handleGlobalPeriodChange);
+});
+onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleGlobalPeriodChange));
 </script>
 
 <template>
@@ -176,7 +185,6 @@ onMounted(() => loadTemplates("", { initial: true }));
       <header class="templates-hero">
         <div><p class="dashboard-eyebrow">Organização recorrente</p><h1>Cadastros</h1><p>Organize seus gastos recorrentes e deixe os próximos meses mais previsíveis.</p></div>
         <div class="templates-hero__actions">
-          <MonthSelector :model-value="selectedMonth" :months="payload?.months || []" :disabled="refreshing" @change="changeMonth" />
           <button class="templates-primary-action" type="button" @click="openCreate"><AppIcon name="plus" :size="18" />Novo cadastro</button>
         </div>
       </header>

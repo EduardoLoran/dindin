@@ -36,6 +36,20 @@ export function completePasswordReset(payload) {
   });
 }
 
+export function updateProfile(profile) {
+  return apiRequest("/api/profile", {
+    method: "PATCH",
+    body: JSON.stringify(profile),
+  });
+}
+
+export function changePassword(payload) {
+  return apiRequest("/api/change-password", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function logout() {
   return apiRequest("/api/logout", { method: "POST" });
 }

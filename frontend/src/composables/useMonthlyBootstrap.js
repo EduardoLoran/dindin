@@ -1,14 +1,15 @@
-import { computed, ref } from "vue";
+import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { getDashboard } from "../api/dashboard";
+import { useGlobalPeriod } from "./useGlobalPeriod";
 
 export function useMonthlyBootstrap() {
   const router = useRouter();
+  const { selectedMonth, setSelectedMonth } = useGlobalPeriod();
   const payload = ref(null);
   const loading = ref(true);
   const refreshing = ref(false);
   const error = ref("");
-  const selectedMonth = ref("");
 
   const month = computed(() => payload.value?.month || null);
   const entries = computed(() => month.value?.entries || []);
@@ -16,7 +17,7 @@ export function useMonthlyBootstrap() {
 
   function applyPayload(nextPayload) {
     payload.value = nextPayload;
-    selectedMonth.value = nextPayload.activeMonth;
+    setSelectedMonth(nextPayload.activeMonth);
   }
 
   async function load(monthKey = "", { initial = false } = {}) {
@@ -24,10 +25,10 @@ export function useMonthlyBootstrap() {
     else refreshing.value = true;
     error.value = "";
     try {
-      let nextPayload = await getDashboard(monthKey);
+      let nextPayload = await getDashboard(monthKey || selectedMonth.value);
       if (initial) {
         const latestMonth = nextPayload.months?.[0]?.monthKey;
-        if (latestMonth && latestMonth !== nextPayload.activeMonth) nextPayload = await getDashboard(latestMonth);
+        if (!selectedMonth.value && latestMonth && latestMonth !== nextPayload.activeMonth) nextPayload = await getDashboard(latestMonth);
       }
       applyPayload(nextPayload);
     } catch (loadError) {
@@ -50,5 +51,16 @@ export function useMonthlyBootstrap() {
     await selectMonth(event.target.value);
   }
 
-  return { payload, month, entries, templates, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth, changeMonth };
+  function listenPeriodChanges(afterLoad) {
+    const handler = async (event) => {
+      const monthKey = event.detail?.monthKey;
+      if (!monthKey || monthKey === payload.value?.activeMonth) return;
+      await load(monthKey);
+      afterLoad?.(payload.value);
+    };
+    window.addEventListener("dindin-period-change", handler);
+    onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handler));
+  }
+
+  return { payload, month, entries, templates, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth, changeMonth, listenPeriodChanges };
 }

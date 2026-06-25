@@ -8,7 +8,7 @@ import { deactivateTemplate, updateTemplateObservation } from "../api/templates"
 import { useMonthlyBootstrap } from "../composables/useMonthlyBootstrap";
 import { formatCurrency, formatMonth } from "../utils/formatters";
 
-const { payload, templates, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth } = useMonthlyBootstrap();
+const { payload, templates, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth, listenPeriodChanges } = useMonthlyBootstrap();
 const search = ref("");
 const cycle = ref("all");
 const selected = ref(null);
@@ -34,6 +34,7 @@ function openObservation(item) { selected.value = item; actionError.value = ""; 
 async function confirmDeactivate() { busy.value = true; try { applyPayload(await deactivateTemplate(selected.value.id, selectedMonth.value)); confirmOpen.value = false; notify("Gasto fixo inativado."); } catch (err) { actionError.value = err.message; } finally { busy.value = false; } }
 async function saveObservation(value) { busy.value = true; try { applyPayload(await updateTemplateObservation(selected.value.id, value, selectedMonth.value)); observationOpen.value = false; notify("Observação atualizada."); } catch (err) { actionError.value = err.message; } finally { busy.value = false; } }
 onMounted(() => load("", { initial: true }));
+listenPeriodChanges();
 </script>
 
 <template><div class="workspace-page"><div v-if="loading" class="workspace-loading"><span v-for="item in 4" :key="item"></span></div><section v-else-if="error" class="dashboard-error"><AppIcon name="alert" /><div><h1>Não foi possível carregar os gastos fixos.</h1><p>{{ error }}</p><button @click="load('', { initial: true })">Tentar novamente</button></div></section><template v-else>

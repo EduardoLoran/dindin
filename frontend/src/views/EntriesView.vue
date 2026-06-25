@@ -12,7 +12,7 @@ import { formatCurrency } from "../utils/formatters";
 
 const FILTER_COOKIE = "dindin-entry-filters";
 const GROUP_KEY = "dindin-entry-groups-collapsed";
-const { payload, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth } = useMonthlyBootstrap();
+const { payload, loading, refreshing, error, selectedMonth, applyPayload, load, selectMonth, listenPeriodChanges } = useMonthlyBootstrap();
 const drafts = ref([]);
 const originals = ref({});
 const saving = ref(false);
@@ -198,6 +198,9 @@ async function confirmDelete() {
 onMounted(() => {
   window.addEventListener("beforeunload", protectUnsavedChanges);
   loadPage("", { initial: true });
+});
+listenPeriodChanges((nextPayload) => {
+  if (nextPayload) initialize(nextPayload);
 });
 onBeforeUnmount(() => window.removeEventListener("beforeunload", protectUnsavedChanges));
 onBeforeRouteLeave(() => !dirtyEntries.value.length || window.confirm("Existem alterações não salvas. Deseja sair mesmo assim?"));
