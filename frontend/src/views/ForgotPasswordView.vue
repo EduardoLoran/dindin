@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import { RouterLink } from "vue-router";
 import { requestPasswordReset } from "../api/auth";
+import TurnstileWidget from "../components/TurnstileWidget.vue";
 import FormField from "../components/FormField.vue";
 import StatusMessage from "../components/StatusMessage.vue";
 
@@ -10,6 +11,7 @@ const fieldError = ref("");
 const requestError = ref("");
 const notice = ref("");
 const submitting = ref(false);
+const turnstile = ref(null);
 
 async function submit() {
   fieldError.value = "";
@@ -22,10 +24,11 @@ async function submit() {
 
   submitting.value = true;
   try {
-    const payload = await requestPasswordReset(email.value.trim());
+    const payload = await requestPasswordReset(email.value.trim(), turnstile.value?.getToken() || "");
     notice.value = payload.message;
   } catch (error) {
     requestError.value = error.message;
+    turnstile.value?.reset();
   } finally {
     submitting.value = false;
   }
@@ -47,6 +50,8 @@ async function submit() {
       <FormField id="recovery-email" v-model="email" label="E-mail" type="email" autocomplete="email" placeholder="voce@exemplo.com" :error="fieldError" :disabled="submitting || Boolean(notice)" required @update:model-value="fieldError = ''; requestError = ''">
         <template #icon><svg viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m5 8 7 5 7-5" /></svg></template>
       </FormField>
+
+      <TurnstileWidget v-if="!notice" ref="turnstile" action="password-recovery" />
 
       <button v-if="!notice" class="primary-button" type="submit" :disabled="submitting">
         <span v-if="submitting" class="button-spinner" aria-hidden="true"></span>

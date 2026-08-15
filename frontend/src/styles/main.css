@@ -53,6 +53,31 @@ a:hover {
   min-height: 100vh;
 }
 
+.turnstile-field {
+  display: grid;
+  gap: 8px;
+  min-height: 78px;
+}
+
+.turnstile-field__label {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.turnstile-field > div {
+  width: 100%;
+}
+
+.turnstile-field small {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+}
+
+.turnstile-field small.is-error {
+  color: var(--color-danger);
+}
+
 .auth-shell {
   display: grid;
   grid-template-columns: minmax(400px, 46%) minmax(0, 54%);

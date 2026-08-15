@@ -5,7 +5,7 @@ const { hashPassword } = require("../lib/security");
 
 function findUserByUsername(username) {
   return db.prepare(`
-    SELECT id, username, email, display_name, avatar_data_url, is_admin, last_login_at, password_salt, password_hash, created_at
+    SELECT id, username, email, display_name, avatar_data_url, is_admin, must_change_password, last_login_at, password_salt, password_hash, created_at
     FROM users
     WHERE username = ?
   `).get(String(username || "").toLowerCase());
@@ -13,7 +13,7 @@ function findUserByUsername(username) {
 
 function findUserByEmail(email) {
   return db.prepare(`
-    SELECT id, username, email, display_name, avatar_data_url, is_admin, last_login_at, password_salt, password_hash, created_at
+    SELECT id, username, email, display_name, avatar_data_url, is_admin, must_change_password, last_login_at, password_salt, password_hash, created_at
     FROM users
     WHERE email = ?
   `).get(String(email || "").trim().toLowerCase());
@@ -21,18 +21,23 @@ function findUserByEmail(email) {
 
 function findUserById(userId) {
   return db.prepare(`
-    SELECT id, username, email, display_name, avatar_data_url, is_admin, last_login_at, password_salt, password_hash, created_at
+    SELECT id, username, email, display_name, avatar_data_url, is_admin, must_change_password, last_login_at, password_salt, password_hash, created_at
     FROM users
     WHERE id = ?
   `).get(userId);
 }
 
-function listUsersForAdmin() {
+function listUsersForAdmin(limit = 25, offset = 0) {
   return db.prepare(`
-    SELECT id, username, email, display_name, avatar_data_url, is_admin, last_login_at, created_at
+    SELECT id, username, email, display_name, avatar_data_url, is_admin, must_change_password, last_login_at, created_at
     FROM users
     ORDER BY datetime(created_at) DESC
-  `).all();
+    LIMIT ? OFFSET ?
+  `).all(limit, offset);
+}
+
+function countUsers() {
+  return Number(db.prepare("SELECT COUNT(*) AS total FROM users").get().total || 0);
 }
 
 function updateLastLogin(userId, isoDate) {
@@ -54,6 +59,7 @@ function insertUserRecord(username, email, displayName, password, isAdmin = fals
     display_name: displayName,
     avatar_data_url: "",
     is_admin: isAdmin ? 1 : 0,
+    must_change_password: 0,
     last_login_at: now,
     password_salt: salt,
     password_hash: hash,
@@ -63,9 +69,10 @@ function insertUserRecord(username, email, displayName, password, isAdmin = fals
   try {
     db.prepare(`
       INSERT INTO users (
-        id, username, email, display_name, avatar_data_url, is_admin, last_login_at, password_salt, password_hash, created_at
+        id, username, email, display_name, avatar_data_url, is_admin, must_change_password,
+        last_login_at, password_salt, password_hash, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       user.id,
       user.username,
@@ -73,6 +80,7 @@ function insertUserRecord(username, email, displayName, password, isAdmin = fals
       user.display_name,
       user.avatar_data_url,
       user.is_admin,
+      user.must_change_password,
       user.last_login_at,
       user.password_salt,
       user.password_hash,
@@ -125,7 +133,7 @@ function updatePassword(userId, password) {
 
   db.prepare(`
     UPDATE users
-    SET password_salt = ?, password_hash = ?
+    SET password_salt = ?, password_hash = ?, must_change_password = 0
     WHERE id = ?
   `).run(salt, hash, userId);
 }
@@ -139,6 +147,7 @@ module.exports = {
   findUserByEmail,
   findUserById,
   listUsersForAdmin,
+  countUsers,
   updateLastLogin,
   insertUserRecord,
   updateUserByAdmin,

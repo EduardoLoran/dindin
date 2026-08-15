@@ -39,6 +39,7 @@ function serializeUser(user) {
     displayName: user.display_name,
     avatarDataUrl: String(user.avatar_data_url || ""),
     isAdmin: Boolean(user.is_admin),
+    mustChangePassword: Boolean(user.must_change_password),
     lastLoginAt: String(user.last_login_at || ""),
     createdAt: String(user.created_at || ""),
   };

@@ -1,5 +1,6 @@
 import { computed, reactive } from "vue";
 import { getSession, logout as logoutRequest } from "../api/auth";
+import { setCsrfToken } from "../api/client";
 
 const session = reactive({
   checked: false,
@@ -18,9 +19,11 @@ export async function ensureSession({ force = false } = {}) {
     const payload = await getSession();
     session.authenticated = Boolean(payload.authenticated);
     session.user = payload.user || null;
+    setCsrfToken(payload.csrfToken);
   } catch {
     session.authenticated = false;
     session.user = null;
+    setCsrfToken("");
   } finally {
     session.checked = true;
     session.loading = false;
@@ -42,6 +45,7 @@ export async function endSession() {
     session.checked = true;
     session.authenticated = false;
     session.user = null;
+    setCsrfToken("");
   }
 }
 

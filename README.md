@@ -1,44 +1,46 @@
 # Dindin
 
-Aplicacao de controle financeiro pessoal com backend Node.js, banco SQLite e frontend Vue.
+Aplicacao de controle financeiro pessoal com backend Node.js, SQLite e frontend Vue 3.
 
-## Executar
+## Requisitos
 
-Na primeira execucao, instale as dependencias do frontend e gere o build:
+- Node.js 24 ou superior (o backend usa `node:sqlite`).
+- npm.
+- Variaveis de ambiente conforme `.env.example`.
+
+Uma instalacao vazia nao cria credenciais padrao. Defina `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_EMAIL` e uma `INITIAL_ADMIN_PASSWORD` com pelo menos 12 caracteres antes da primeira inicializacao.
+
+## Desenvolvimento
 
 ```powershell
-cd frontend
-npm install
-cd ..
+npm ci --prefix frontend
 npm run build
+npm test
 npm start
 ```
 
-A aplicacao estara disponivel em `http://127.0.0.1:3030`.
-
-## Desenvolvimento do frontend
-
-Com o backend executando em um terminal, inicie o Vite em outro:
+A aplicacao fica em `http://127.0.0.1:3030`. Para trabalhar com o Vite em outro terminal:
 
 ```powershell
 npm run dev:frontend
 ```
 
-O Vite usa proxy para as APIs em `http://127.0.0.1:3030`.
+## Seguranca
 
-## Estrutura atual
+- Sessao opaca persistida no SQLite; somente o hash do identificador e armazenado.
+- Cookie `Secure`, `HttpOnly`, `SameSite=Strict` e prefixo `__Host-` em producao.
+- CSRF, origem permitida, limite de payload, validacao estrita e rate limiting nas APIs.
+- Cloudflare Turnstile em login, cadastro e recuperacao quando configurado.
+- Meses fechados sao somente leitura no frontend e no backend.
+- Migracoes nao destroem tabelas e criam um backup SQLite antes da primeira atualizacao do esquema.
 
-- `server.js` e `src/`: servidor HTTP, APIs, servicos, repositorios e SQLite.
-- `frontend/`: novo frontend Vue 3 + Vite para autenticacao e telas internas migradas.
-- `public/auth-app/`: build gerado do novo frontend.
-- `public/index.html`, `public/app.js` e `public/styles.css`: telas autenticadas legadas.
-- `data/gastos.sqlite`: banco local.
-- `docs/identidade-visual-login.md`: tokens, logo e regras da nova identidade.
-- `docs/interface-cadastros.md`: estrutura, regras e componentes da nova tela de cadastros.
-- `docs/interfaces-internas.md`: regras e arquitetura das telas internas migradas.
+## Estrutura
 
-## Migracao incremental
+- `server.js` e `src/`: HTTP, APIs, servicos, repositorios e SQLite.
+- `frontend/`: frontend Vue 3, Vite e Tabulator.
+- `public/auth-app/`: build de producao do frontend.
+- `test/`: testes de integracao e seguranca com banco temporario.
+- `deploy/`: exemplos de systemd, Nginx e configuracao da VPS.
+- `scripts/`: backup e manutencao controlada do historico Git.
 
-As rotas publicas e todas as areas autenticadas (`/visao-geral`, `/cadastros`, `/lancamentos`, `/detalhes`, `/gastos-fixos` e `/admin/usuarios`) usam o frontend Vue 3 + Vite. Os arquivos legados permanecem temporariamente no projeto apenas como referencia durante a consolidacao da migracao.
-
-O projeto usa `node:sqlite`, disponivel no Node.js 24 utilizado no ambiente atual.
+O procedimento completo para Debian 13 esta em `deploy/README.md`.

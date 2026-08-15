@@ -7,15 +7,7 @@
     <meta name="description" content="Acesse sua conta no Dindin." />
     <link rel="icon" type="image/svg+xml" href="/auth-app/favicon.svg" />
     <title>Dindin | Acesso</title>
-    <script>
-      (() => {
-        const storedTheme = localStorage.getItem("dindin-theme");
-        const systemTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-        const theme = ["light", "dark"].includes(storedTheme) ? storedTheme : systemTheme;
-        document.documentElement.dataset.theme = theme;
-        document.documentElement.style.colorScheme = theme;
-      })();
-    </script>
+    <script vite-ignore src="/auth-app/theme-init.js"></script>
   </head>
   <body>
     <div id="app"></div>

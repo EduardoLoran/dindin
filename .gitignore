@@ -1,4 +1,32 @@
+# Dependencies and generated caches
+node_modules/
+frontend/node_modules/
+.tmp-*/
+*.log
+npm-debug.log*
 
-data/*.sqlite
-data/*.sqlite-*
-data/*.db
+# Runtime data and backups
+data/
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.db
+*.backup
+*.bak
+backups/
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Editor and operating-system files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

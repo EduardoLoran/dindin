@@ -4,6 +4,10 @@ export function getSession() {
   return apiRequest("/api/session");
 }
 
+export function getPublicConfig() {
+  return apiRequest("/api/public-config");
+}
+
 export function login(credentials) {
   return apiRequest("/api/login", {
     method: "POST",
@@ -18,10 +22,10 @@ export function register(account) {
   });
 }
 
-export function requestPasswordReset(email) {
+export function requestPasswordReset(email, turnstileToken) {
   return apiRequest("/api/password-reset/request", {
     method: "POST",
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ email, turnstileToken }),
   });
 }
 

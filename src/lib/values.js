@@ -15,7 +15,7 @@ function normalizeStatus(status) {
 }
 
 function normalizeMonthKey(value) {
-  return /^\d{4}-\d{2}$/.test(String(value || "")) ? String(value) : null;
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || "")) ? String(value) : null;
 }
 
 function addMonthsToMonthKey(monthKey, offset) {
@@ -56,7 +56,10 @@ function toCents(value) {
   }
 
   normalized = normalized.replace(/[^\d.-]/g, "");
-  const number = Number(normalized) || 0;
+  const number = Number(normalized);
+  if (!Number.isFinite(number)) {
+    return Number.NaN;
+  }
   return Math.round(number * 100);
 }
 

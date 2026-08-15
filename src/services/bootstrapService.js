@@ -1,4 +1,3 @@
-const { DB_FILE } = require("../config");
 const { serializeEntry, serializeTemplate, serializeUser } = require("../lib/serializers");
 const { fromCents, getCurrentMonthKey, normalizeMonthKey, sumCents } = require("../lib/values");
 const { listEntries } = require("../repositories/entryRepository");
@@ -34,17 +33,24 @@ function buildBootstrapPayload(user, monthKey) {
   return {
     user: serializeUser(user),
     activeMonth: resolvedMonthKey,
-    databaseFile: DB_FILE,
     lastAutoRolloverAt: month?.created_at || "",
     month: {
       monthKey: resolvedMonthKey,
       salary: fromCents(effectiveSalaryCents),
+      salaryDefined: Boolean(month?.salary_defined),
+      fixedEntriesInitialized: Boolean(month?.fixed_entries_initialized),
+      isClosed: Boolean(month?.closed_at),
+      closedAt: String(month?.closed_at || ""),
       summary: buildSummary(entries, effectiveSalaryCents),
       entries: entries.map(serializeEntry),
     },
     months: months.map((item) => ({
       monthKey: item.month_key,
       salary: fromCents(Number(item.salary_defined) === 1 ? item.salary_cents : 0),
+      salaryDefined: Boolean(item.salary_defined),
+      fixedEntriesInitialized: Boolean(item.fixed_entries_initialized),
+      isClosed: Boolean(item.closed_at),
+      closedAt: String(item.closed_at || ""),
       createdAt: item.created_at,
     })),
     templates: templates.map(serializeTemplate),

@@ -30,6 +30,7 @@ const mutationError = ref("");
 const notice = ref("");
 
 const templates = computed(() => payload.value?.templates || []);
+const isClosed = computed(() => Boolean(payload.value?.month?.isClosed));
 const fixedCount = computed(() => templates.value.filter((item) => !item.isVariable).length);
 const variableCount = computed(() => templates.value.length - fixedCount.value);
 const defaultTotal = computed(() => templates.value.reduce((total, item) => total + Number(item.amount || 0), 0));
@@ -87,24 +88,28 @@ async function changeMonth(monthKey) {
 }
 
 function openCreate() {
+  if (isClosed.value) return;
   selectedTemplate.value = null;
   mutationError.value = "";
   formOpen.value = true;
 }
 
 function openEdit(template) {
+  if (isClosed.value) return;
   selectedTemplate.value = template;
   mutationError.value = "";
   formOpen.value = true;
 }
 
 function openObservation(template) {
+  if (isClosed.value) return;
   selectedTemplate.value = template;
   mutationError.value = "";
   observationOpen.value = true;
 }
 
 function openDeactivate(template) {
+  if (isClosed.value) return;
   selectedTemplate.value = template;
   mutationError.value = "";
   confirmOpen.value = true;
@@ -114,7 +119,7 @@ async function saveTemplate(form) {
   mutationBusy.value = true;
   mutationError.value = "";
   try {
-    const body = { ...form, monthKey: selectedMonth.value };
+    const body = { ...form, observation: selectedTemplate.value?.observation || "", monthKey: selectedMonth.value };
     const nextPayload = selectedTemplate.value
       ? await updateTemplate(selectedTemplate.value.id, body)
       : await createTemplate({ ...body, observation: "" });

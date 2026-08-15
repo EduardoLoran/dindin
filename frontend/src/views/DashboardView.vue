@@ -2,9 +2,10 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import AppIcon from "../components/AppIcon.vue";
+import ConfirmDialog from "../components/ConfirmDialog.vue";
 import SalaryDialog from "../components/SalaryDialog.vue";
 import SummaryCard from "../components/SummaryCard.vue";
-import { getDashboard, updateSalary } from "../api/dashboard";
+import { closeMonth, createMonth, getDashboard, reopenMonth, updateSalary } from "../api/dashboard";
 import { useGlobalPeriod } from "../composables/useGlobalPeriod";
 import { useSession } from "../composables/useSession";
 import { formatCompactDate, formatCurrency, formatMonth } from "../utils/formatters";
@@ -19,6 +20,8 @@ const dashboard = ref(null);
 const salaryDialogOpen = ref(false);
 const savingSalary = ref(false);
 const salaryError = ref("");
+const salaryMode = ref("edit");
+const monthStateConfirmOpen = ref(false);
 
 const month = computed(() => dashboard.value?.month || null);
 const summary = computed(() => month.value?.summary || {
@@ -26,6 +29,7 @@ const summary = computed(() => month.value?.summary || {
 });
 const entries = computed(() => month.value?.entries || []);
 const monthLabel = computed(() => formatMonth(selectedMonth.value || dashboard.value?.activeMonth));
+const suggestedMonth = computed(() => nextAvailableMonth(selectedMonth.value || dashboard.value?.activeMonth));
 const firstName = computed(() => String(user.value?.displayName || user.value?.username || "").trim().split(/\s+/)[0]);
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -99,11 +103,24 @@ async function changeMonth(nextMonth) {
   if (nextMonth && nextMonth !== selectedMonth.value) await loadDashboard(nextMonth);
 }
 
-async function saveSalary(value) {
+function openSalary(mode) {
+  salaryMode.value = mode;
+  salaryError.value = "";
+  salaryDialogOpen.value = true;
+}
+
+function requestMonthStateChange() {
+  salaryDialogOpen.value = false;
+  monthStateConfirmOpen.value = true;
+}
+
+async function saveSalary(form) {
   salaryError.value = "";
   savingSalary.value = true;
   try {
-    dashboard.value = await updateSalary(selectedMonth.value, value);
+    dashboard.value = salaryMode.value === "create"
+      ? await createMonth(form)
+      : await updateSalary(selectedMonth.value, form.salary);
     setSelectedMonth(dashboard.value.activeMonth);
     salaryDialogOpen.value = false;
   } catch (saveError) {
@@ -111,6 +128,30 @@ async function saveSalary(value) {
   } finally {
     savingSalary.value = false;
   }
+}
+
+async function confirmMonthStateChange() {
+  savingSalary.value = true;
+  salaryError.value = "";
+  try {
+    dashboard.value = month.value?.isClosed
+      ? await reopenMonth(selectedMonth.value)
+      : await closeMonth(selectedMonth.value);
+    monthStateConfirmOpen.value = false;
+  } catch (stateError) {
+    salaryError.value = stateError.message;
+  } finally {
+    savingSalary.value = false;
+  }
+}
+
+function nextAvailableMonth(baseMonth) {
+  const [year, monthNumber] = String(baseMonth || new Date().toISOString().slice(0, 7)).split("-").map(Number);
+  const date = new Date(Date.UTC(year, monthNumber, 1));
+  const candidate = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+  return dashboard.value?.months?.some((item) => item.monthKey === candidate)
+    ? nextAvailableMonth(candidate)
+    : candidate;
 }
 
 onMounted(() => loadDashboard("", { initial: true }));
@@ -154,7 +195,7 @@ onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleG
 
       <section class="dashboard-grid dashboard-grid--insights">
         <article class="dashboard-panel budget-panel">
-          <div class="panel-heading"><div><p class="dashboard-eyebrow">Planejamento</p><h2>Saúde do orçamento</h2></div><button class="panel-action" type="button" @click="salaryError = ''; salaryDialogOpen = true"><AppIcon name="edit" :size="16" />Editar salário</button></div>
+          <div class="panel-heading"><div><p class="dashboard-eyebrow">Planejamento</p><h2>Saúde do orçamento</h2></div><div class="panel-heading__actions"><button class="panel-action" type="button" @click="openSalary('create')"><AppIcon name="plus" :size="16" />Novo salário</button><button class="panel-action" type="button" :disabled="!month?.salaryDefined" @click="openSalary('edit')"><AppIcon name="edit" :size="16" />Editar salário</button></div></div>
           <div class="budget-panel__content">
             <div class="budget-ring" :style="{ '--budget-progress': `${budgetPercent * 3.6}deg` }"><div><strong>{{ budgetPercent }}%</strong><span>comprometido</span></div></div>
             <div class="budget-metrics">
@@ -184,11 +225,12 @@ onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleG
 
         <aside class="dashboard-side-stack">
           <article class="dashboard-panel quick-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Atalhos</p><h2>Acesso rápido</h2></div></div><RouterLink to="/cadastros"><span><AppIcon name="templates" /></span><div><strong>Novo cadastro</strong><small>Organize um gasto recorrente</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink><RouterLink to="/lancamentos"><span><AppIcon name="entries" /></span><div><strong>Revisar lançamentos</strong><small>Atualize valores e status</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink><RouterLink to="/detalhes"><span><AppIcon name="details" /></span><div><strong>Explorar detalhes</strong><small>Analise a composição do mês</small></div><AppIcon name="arrow-right" :size="16" /></RouterLink></article>
-          <article class="dashboard-panel history-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Histórico</p><h2>Meses recentes</h2></div></div><div v-if="dashboard?.months?.length" class="history-list"><button v-for="savedMonth in dashboard.months.slice(0, 3)" :key="savedMonth.monthKey" type="button" :class="{ 'is-active': savedMonth.monthKey === selectedMonth }" @click="changeMonth(savedMonth.monthKey)"><span><strong>{{ formatMonth(savedMonth.monthKey) }}</strong><small>Criado em {{ formatCompactDate(savedMonth.createdAt) }}</small></span><b>{{ formatCurrency(savedMonth.salary) }}</b></button></div><p v-else class="history-empty">O histórico aparecerá quando você salvar seu primeiro mês.</p></article>
+          <article class="dashboard-panel history-panel"><div class="panel-heading"><div><p class="dashboard-eyebrow">Histórico</p><h2>Meses recentes</h2></div></div><div v-if="dashboard?.months?.length" class="history-list"><button v-for="savedMonth in dashboard.months.slice(0, 3)" :key="savedMonth.monthKey" type="button" :class="{ 'is-active': savedMonth.monthKey === selectedMonth }" @click="changeMonth(savedMonth.monthKey)"><span><strong>{{ formatMonth(savedMonth.monthKey) }} <em v-if="savedMonth.isClosed">Fechado</em></strong><small>Criado em {{ formatCompactDate(savedMonth.createdAt) }}</small></span><b>{{ formatCurrency(savedMonth.salary) }}</b></button></div><p v-else class="history-empty">O histórico aparecerá quando você salvar seu primeiro mês.</p></article>
         </aside>
       </section>
 
-      <SalaryDialog :open="salaryDialogOpen" :current-value="summary.salary" :month-label="monthLabel" :saving="savingSalary" :error="salaryError" @close="salaryDialogOpen = false" @save="saveSalary" />
+      <SalaryDialog :open="salaryDialogOpen" :mode="salaryMode" :current-value="summary.salary" :month-key="selectedMonth" :suggested-month="suggestedMonth" :is-closed="month?.isClosed" :saving="savingSalary" :error="salaryError" @close="salaryDialogOpen = false" @save="saveSalary" @request-close-month="requestMonthStateChange" @request-reopen-month="requestMonthStateChange" />
+      <ConfirmDialog :open="monthStateConfirmOpen" :title="month?.isClosed ? 'Reabrir mês?' : 'Fechar mês?'" :message="month?.isClosed ? 'O período voltará a aceitar alterações de salário e lançamentos.' : 'O salário, os lançamentos e as operações que afetam este período ficarão somente para consulta.'" :confirm-label="month?.isClosed ? 'Reabrir mês' : 'Fechar mês'" :busy="savingSalary" @close="monthStateConfirmOpen = false" @confirm="confirmMonthStateChange" />
     </template>
   </div>
 </template>

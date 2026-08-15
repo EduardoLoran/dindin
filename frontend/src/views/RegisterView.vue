@@ -2,6 +2,7 @@
 import { reactive, ref } from "vue";
 import { RouterLink } from "vue-router";
 import { register } from "../api/auth";
+import TurnstileWidget from "../components/TurnstileWidget.vue";
 import FormField from "../components/FormField.vue";
 import PasswordField from "../components/PasswordField.vue";
 import StatusMessage from "../components/StatusMessage.vue";
@@ -16,6 +17,7 @@ const form = reactive({
 const errors = reactive({});
 const submitting = ref(false);
 const requestError = ref("");
+const turnstile = ref(null);
 
 function clearError(field) {
   errors[field] = "";
@@ -27,7 +29,7 @@ function validate() {
   if (form.displayName.trim().length < 3) errors.displayName = "Informe um nome com pelo menos 3 caracteres.";
   if (!/^[a-zA-Z0-9._-]{3,24}$/.test(form.username.trim())) errors.username = "Use de 3 a 24 letras, números, ponto, traço ou underline.";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) errors.email = "Informe um e-mail válido.";
-  if (form.password.length < 6) errors.password = "A senha deve ter pelo menos 6 caracteres.";
+  if (form.password.length < 12) errors.password = "A senha deve ter pelo menos 12 caracteres.";
   if (form.passwordConfirmation !== form.password) errors.passwordConfirmation = "As senhas não coincidem.";
   return !Object.keys(errors).length;
 }
@@ -44,10 +46,12 @@ async function submit() {
       email: form.email.trim(),
       password: form.password,
       passwordConfirmation: form.passwordConfirmation,
+      turnstileToken: turnstile.value?.getToken() || "",
     });
     window.location.assign("/visao-geral");
   } catch (error) {
     requestError.value = error.message;
+    turnstile.value?.reset();
   } finally {
     submitting.value = false;
   }
@@ -82,6 +86,8 @@ async function submit() {
         <PasswordField id="register-password" v-model="form.password" label="Senha" autocomplete="new-password" :error="errors.password" :disabled="submitting" required @update:model-value="clearError('password')" />
         <PasswordField id="password-confirmation" v-model="form.passwordConfirmation" label="Confirmar senha" autocomplete="new-password" placeholder="Repita sua senha" :error="errors.passwordConfirmation" :disabled="submitting" required @update:model-value="clearError('passwordConfirmation')" />
       </div>
+
+      <TurnstileWidget ref="turnstile" action="register" />
 
       <button class="primary-button" type="submit" :disabled="submitting">
         <span v-if="submitting" class="button-spinner" aria-hidden="true"></span>

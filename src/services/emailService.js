@@ -1,11 +1,13 @@
 const net = require("node:net");
 const tls = require("node:tls");
-const { HOST, PORT, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_SECURE, SMTP_USER } = require("../config");
+const { PUBLIC_URL, SMTP_FROM, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_SECURE, SMTP_USER } = require("../config");
 const { clientError } = require("../lib/errors");
 
-function createPasswordResetLink(request, rawToken) {
-  const host = request.headers.host || `${HOST}:${PORT}`;
-  return `http://${host}/redefinir-senha?token=${encodeURIComponent(rawToken)}`;
+function createPasswordResetLink(rawToken) {
+  if (!PUBLIC_URL) {
+    throw clientError("PUBLIC_URL ainda nao foi configurada no servidor.");
+  }
+  return `${PUBLIC_URL}/redefinir-senha?token=${encodeURIComponent(rawToken)}`;
 }
 
 function isSmtpConfigured() {
@@ -71,12 +73,10 @@ function openSmtpSocket() {
       : net.createConnection(SMTP_PORT, SMTP_HOST);
 
     socket.setEncoding("utf8");
+    socket.setTimeout(15000, () => socket.destroy(new Error("Tempo limite de conexao SMTP excedido.")));
     socket.once("error", reject);
-    socket.once("connect", () => {
-      socket.removeListener("error", reject);
-      resolve(socket);
-    });
-    socket.once("secureConnect", () => {
+    const readyEvent = SMTP_SECURE ? "secureConnect" : "connect";
+    socket.once(readyEvent, () => {
       socket.removeListener("error", reject);
       resolve(socket);
     });
@@ -91,6 +91,7 @@ function upgradeSocketToTls(socket) {
     });
 
     secureSocket.setEncoding("utf8");
+    secureSocket.setTimeout(15000, () => secureSocket.destroy(new Error("Tempo limite de conexao SMTP excedido.")));
     secureSocket.once("error", reject);
     secureSocket.once("secureConnect", () => {
       secureSocket.removeListener("error", reject);

@@ -15,7 +15,7 @@ function submit() {
   errors.displayName = form.displayName.trim().length >= 3 ? "" : "Informe ao menos 3 caracteres.";
   errors.username = /^[a-z0-9._-]{3,24}$/.test(form.username.trim().toLowerCase()) ? "" : "Use 3 a 24 letras, números, ponto, traço ou underline.";
   errors.email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()) ? "" : "Informe um e-mail válido.";
-  errors.password = editing.value || (form.password.length >= 6 && form.password === form.confirmation) ? "" : "Use ao menos 6 caracteres e confirme a mesma senha.";
+  errors.password = editing.value || (form.password.length >= 12 && form.password === form.confirmation) ? "" : "Use ao menos 12 caracteres e confirme a mesma senha.";
   if (Object.values(errors).some(Boolean)) return;
   emit("save", { displayName: form.displayName.trim(), username: form.username.trim().toLowerCase(), email: form.email.trim().toLowerCase(), isAdmin: form.isAdmin, ...(editing.value ? {} : { password: form.password, passwordConfirmation: form.confirmation }) });
 }

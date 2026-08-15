@@ -29,6 +29,16 @@ function findEntryMonthById(userId, entryId) {
   return db.prepare("SELECT month_key FROM entries WHERE id = ? AND user_id = ?").get(entryId, userId);
 }
 
+function listOwnedEntryIdsInMonth(userId, monthKey, entryIds) {
+  if (!entryIds.length) return [];
+  const placeholders = entryIds.map(() => "?").join(",");
+  return db.prepare(`
+    SELECT id
+    FROM entries
+    WHERE user_id = ? AND month_key = ? AND id IN (${placeholders})
+  `).all(userId, monthKey, ...entryIds).map((row) => row.id);
+}
+
 function findEntryByTemplateInMonth(userId, templateId, monthKey) {
   return db.prepare(`
     SELECT id
@@ -95,6 +105,26 @@ function updateEntryObservation(userId, entryId, observation, updatedAt) {
   `).run(observation, updatedAt, entryId, userId);
 }
 
+function updateEntriesBulk(userId, monthKey, entries, updatedAt) {
+  const statement = db.prepare(`
+    UPDATE entries
+    SET amount_cents = ?, cycle = ?, status = ?, observation = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND month_key = ?
+  `);
+  for (const entry of entries) {
+    statement.run(
+      entry.amountCents,
+      entry.cycle,
+      entry.status,
+      entry.observation,
+      updatedAt,
+      entry.id,
+      userId,
+      monthKey
+    );
+  }
+}
+
 function updateEntryFromTemplate(userId, entryId, template, updatedAt) {
   db.prepare(`
     UPDATE entries
@@ -144,12 +174,14 @@ function deleteEntriesByMonth(userId, monthKey) {
 module.exports = {
   listEntries,
   findEntryMonthById,
+  listOwnedEntryIdsInMonth,
   findEntryByTemplateInMonth,
   listEntryIdsByTemplateInMonth,
   listDuplicateTemplateEntryGroups,
   insertEntryFromTemplate,
   updateEntry,
   updateEntryObservation,
+  updateEntriesBulk,
   updateEntryFromTemplate,
   deleteEntry,
   deleteEntriesByIds,

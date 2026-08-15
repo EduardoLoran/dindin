@@ -311,7 +311,7 @@
       <section class="panel">
         <h3>Usuarios e autenticacao</h3>
         <ul>
-          <li>Existe um usuario admin padrao local: <code>admin</code> / <code>admin123</code> se o banco nascer vazio.</li>
+          <li>Uma instalacao vazia exige as variaveis <code>INITIAL_ADMIN_USERNAME</code>, <code>INITIAL_ADMIN_EMAIL</code> e <code>INITIAL_ADMIN_PASSWORD</code>; nenhuma senha padrao e criada.</li>
           <li>As sessoes sao mantidas em memoria no processo Node. Reiniciar o servidor invalida todas as sessoes.</li>
           <li>Senhas sao hashadas com <code>scrypt</code>.</li>
           <li>Fluxo de redefinicao de senha usa token hash em SQLite, com expiracao de 60 minutos.</li>

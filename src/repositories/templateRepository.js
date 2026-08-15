@@ -57,6 +57,7 @@ function updateTemplate(userId, templateId, payload) {
       default_amount_cents = ?,
       cycle = ?,
       payment_method = ?,
+      observation = ?,
       start_month = ?,
       is_variable = ?
     WHERE id = ? AND user_id = ?
@@ -65,6 +66,7 @@ function updateTemplate(userId, templateId, payload) {
     payload.amountCents,
     payload.cycle,
     payload.paymentMethod,
+    payload.observation,
     payload.startMonth,
     payload.isVariable ? 1 : 0,
     templateId,

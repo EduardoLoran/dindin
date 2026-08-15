@@ -5,6 +5,8 @@ import "@fontsource/manrope/latin-700.css";
 import { createApp } from "vue";
 import App from "./App.vue";
 import router from "./router";
+import "@vuepic/vue-datepicker/dist/main.css";
+import "tabulator-tables/dist/css/tabulator.min.css";
 import "./styles/tokens.css";
 import "./styles/main.css";
 import "./styles/dashboard.css";

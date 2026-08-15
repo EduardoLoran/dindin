@@ -1,0 +1,37 @@
+[Unit]
+Description=Dindin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dindin
+Group=dindin
+WorkingDirectory=/opt/dindin
+EnvironmentFile=/etc/dindin.env
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/dindin
+
+[Install]
+WantedBy=multi-user.target

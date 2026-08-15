@@ -5,6 +5,7 @@
   "description": "Aplicacao local em Vue + SQLite para controle de gastos fixos mensais.",
   "scripts": {
     "start": "node server.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend"

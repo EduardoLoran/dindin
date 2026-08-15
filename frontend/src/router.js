@@ -6,10 +6,10 @@ import LoginView from "./views/LoginView.vue";
 import RegisterView from "./views/RegisterView.vue";
 import ResetPasswordView from "./views/ResetPasswordView.vue";
 import TemplatesView from "./views/TemplatesView.vue";
-import EntriesView from "./views/EntriesView.vue";
 import DetailsView from "./views/DetailsView.vue";
 import FixedExpensesView from "./views/FixedExpensesView.vue";
 import AdminUsersView from "./views/AdminUsersView.vue";
+import ForcePasswordChangeView from "./views/ForcePasswordChangeView.vue";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -19,9 +19,10 @@ const router = createRouter({
     { path: "/cadastro", name: "register", component: RegisterView, meta: { layout: "auth", publicOnly: true } },
     { path: "/esqueci-senha", name: "forgot-password", component: ForgotPasswordView, meta: { layout: "auth", publicOnly: true } },
     { path: "/redefinir-senha", name: "reset-password", component: ResetPasswordView, meta: { layout: "auth", publicOnly: true } },
+    { path: "/trocar-senha", name: "force-password-change", component: ForcePasswordChangeView, meta: { layout: "auth", requiresAuth: true } },
     { path: "/visao-geral", name: "dashboard", component: DashboardView, meta: { layout: "dashboard", requiresAuth: true, title: "Visão geral" } },
     { path: "/cadastros", name: "templates", component: TemplatesView, meta: { layout: "dashboard", requiresAuth: true, title: "Cadastros" } },
-    { path: "/lancamentos", name: "entries", component: EntriesView, meta: { layout: "dashboard", requiresAuth: true, title: "Lançamentos" } },
+    { path: "/lancamentos", name: "entries", component: () => import("./views/EntriesView.vue"), meta: { layout: "dashboard", requiresAuth: true, title: "Lançamentos" } },
     { path: "/detalhes", name: "details", component: DetailsView, meta: { layout: "dashboard", requiresAuth: true, title: "Detalhes" } },
     { path: "/gastos-fixos", name: "fixed-expenses", component: FixedExpensesView, meta: { layout: "dashboard", requiresAuth: true, title: "Gastos fixos" } },
     { path: "/admin/usuarios", name: "admin-users", component: AdminUsersView, meta: { layout: "dashboard", requiresAuth: true, requiresAdmin: true, title: "Administração" } },
@@ -35,6 +36,14 @@ router.beforeEach(async (to) => {
 
   if (to.meta.requiresAuth && !session.authenticated) {
     return { name: "login", query: { redirect: to.fullPath } };
+  }
+
+  if (session.authenticated && session.user?.mustChangePassword && to.name !== "force-password-change") {
+    return { name: "force-password-change" };
+  }
+
+  if (to.name === "force-password-change" && !session.user?.mustChangePassword) {
+    return { name: "dashboard" };
   }
 
   if (to.meta.requiresAdmin && !session.user?.isAdmin) {
