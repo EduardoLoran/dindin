@@ -29,7 +29,7 @@ const visibleTotal = computed(() => visibleRows.value.reduce((total, entry) => t
 
 const columns = computed(() => [
   { title: "Ações", field: "actions", width: isClosed.value ? 78 : 112, minWidth: isClosed.value ? 78 : 112, maxWidth: isClosed.value ? 78 : 112, cssClass: "entries-actions-cell", headerHozAlign: "center", clipboard: false, formatter: actionsFormatter, cellClick: handleActionClick },
-  { title: "Lançamento", field: "name", width: 210, minWidth: 160, maxWidth: 230, headerValueFilter: true },
+  { title: "Lançamento", field: "name", minWidth: 210, widthGrow: 1, widthShrink: 1, headerValueFilter: true },
   { title: "Valor", field: "amount", width: 130, hozAlign: "right", formatter: (cell) => formatCurrency(Number(cell.getValue()) || 0), headerValueFilter: { formatter: (value) => formatCurrency(Number(value) || 0) } },
   { title: "Ciclo", field: "cycle", width: 145, formatter: (cell) => cycleLabel(cell.getValue()), headerValueFilter: { formatter: cycleLabel } },
   { title: "Status", field: "status", width: 135, formatter: (cell) => cellTag(statusLabel(cell.getValue()), `status-${cell.getValue() || "unknown"}`), headerValueFilter: { formatter: statusLabel } },
