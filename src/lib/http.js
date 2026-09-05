@@ -70,6 +70,22 @@ async function readJson(request) {
   }
 }
 
+async function readBuffer(request, limitBytes) {
+  const chunks = [];
+  let size = 0;
+
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > limitBytes) {
+      throw httpError(413, "Arquivo excede o limite permitido.", "payload_too_large");
+    }
+    chunks.push(chunk);
+  }
+
+  if (!chunks.length) throw httpError(400, "Selecione um arquivo OFX.", "empty_file");
+  return Buffer.concat(chunks);
+}
+
 function serveStatic(response, pathname) {
   const requestedPath = pathname === "/" ? "/auth-app/index.html" : pathname;
   const safePath = path.normalize(requestedPath).replace(/^[/\\]+/, "");
@@ -145,6 +161,7 @@ module.exports = {
   sendJson,
   sendText,
   readJson,
+  readBuffer,
   serveStatic,
   setSecurityHeaders,
 };

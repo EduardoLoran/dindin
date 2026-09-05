@@ -1,3 +1,5 @@
+import { shouldHideValues } from "../composables/useValuePrivacy";
+
 const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -10,6 +12,7 @@ const monthFormatter = new Intl.DateTimeFormat("pt-BR", {
 });
 
 export function formatCurrency(value) {
+  if (shouldHideValues()) return "R$ ••••";
   return currencyFormatter.format(Number(value) || 0);
 }
 

@@ -14,10 +14,18 @@ function listEntries(userId, monthKey) {
       COALESCE(NULLIF(entries.observation, ''), templates.observation, '') AS observation,
       entries.status,
       entries.is_variable,
+      entries.direction,
+      entries.is_salary,
+      entries.transaction_date,
+      entries.source_type,
+      entries.category_id,
+      categories.name AS category_name,
+      categories.color AS category_color,
       entries.created_at,
       entries.updated_at
     FROM entries
     LEFT JOIN templates ON templates.id = entries.template_id
+    LEFT JOIN categories ON categories.id = entries.category_id
     WHERE entries.user_id = ? AND entries.month_key = ?
     ORDER BY
       CASE entries.cycle WHEN 'Inicio Do Mes' THEN 0 ELSE 1 END,
@@ -26,7 +34,7 @@ function listEntries(userId, monthKey) {
 }
 
 function findEntryMonthById(userId, entryId) {
-  return db.prepare("SELECT month_key FROM entries WHERE id = ? AND user_id = ?").get(entryId, userId);
+  return db.prepare("SELECT month_key, direction, is_salary FROM entries WHERE id = ? AND user_id = ?").get(entryId, userId);
 }
 
 function listOwnedEntryIdsInMonth(userId, monthKey, entryIds) {
@@ -70,8 +78,9 @@ function insertEntryFromTemplate(userId, monthKey, template) {
   const now = new Date().toISOString();
   db.prepare(`
     INSERT OR IGNORE INTO entries (
-      id, user_id, month_key, template_id, name, amount_cents, cycle, payment_method, observation, status, is_variable, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, user_id, month_key, template_id, name, amount_cents, cycle, payment_method, observation, status, is_variable,
+      direction, transaction_date, source_type, category_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'expense', '', 'fixed', ?, ?, ?)
   `).run(
     randomUUID(),
     userId,
@@ -84,9 +93,106 @@ function insertEntryFromTemplate(userId, monthKey, template) {
     template.observation || "",
     "pending",
     template.is_variable,
+    template.category_id || null,
     now,
     now
   );
+}
+
+function listPendingExpenseEntries(userId, monthKey) {
+  return db.prepare(`
+    SELECT id, name, amount_cents, cycle, payment_method, observation, status, updated_at
+    FROM entries
+    WHERE user_id = ? AND month_key = ? AND direction = 'expense' AND status = 'pending'
+    ORDER BY amount_cents DESC, name COLLATE NOCASE ASC
+  `).all(userId, monthKey);
+}
+
+function findEntryForImport(userId, entryId, monthKey) {
+  return db.prepare(`
+    SELECT id, user_id, month_key, template_id, name, amount_cents, cycle, payment_method,
+      observation, status, is_variable, direction, is_salary, transaction_date, source_type, category_id, created_at, updated_at
+    FROM entries
+    WHERE id = ? AND user_id = ? AND month_key = ?
+  `).get(entryId, userId, monthKey);
+}
+
+function insertImportedEntry(userId, payload) {
+  const id = randomUUID();
+  db.prepare(`
+    INSERT INTO entries (
+      id, user_id, month_key, template_id, name, amount_cents, cycle, payment_method,
+      observation, status, is_variable, direction, is_salary, transaction_date, source_type, category_id, created_at, updated_at
+    ) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, 'paid', 1, ?, ?, ?, 'ofx', ?, ?, ?)
+  `).run(
+    id,
+    userId,
+    payload.monthKey,
+    payload.name,
+    payload.amountCents,
+    payload.cycle,
+    payload.paymentMethod,
+    payload.observation || "",
+    payload.direction,
+    payload.isSalary ? 1 : 0,
+    payload.transactionDate,
+    payload.categoryId || null,
+    payload.createdAt,
+    payload.createdAt
+  );
+  return id;
+}
+
+function applyImportedExpenseToEntry(userId, entryId, payload) {
+  return db.prepare(`
+    UPDATE entries
+    SET amount_cents = ?, cycle = ?, payment_method = ?, status = 'paid',
+      transaction_date = ?, source_type = 'ofx', category_id = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND month_key = ? AND direction = 'expense'
+  `).run(
+    payload.amountCents,
+    payload.cycle,
+    payload.paymentMethod,
+    payload.transactionDate,
+    payload.categoryId || null,
+    payload.updatedAt,
+    entryId,
+    userId,
+    payload.monthKey
+  );
+}
+
+function restoreEntryAfterImport(userId, snapshot, expectedUpdatedAt) {
+  return db.prepare(`
+    UPDATE entries
+    SET name = ?, amount_cents = ?, cycle = ?, payment_method = ?, observation = ?, status = ?,
+      is_variable = ?, direction = ?, is_salary = ?, transaction_date = ?, source_type = ?, category_id = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND updated_at = ?
+  `).run(
+    snapshot.name,
+    snapshot.amount_cents,
+    snapshot.cycle,
+    snapshot.payment_method,
+    snapshot.observation,
+    snapshot.status,
+    snapshot.is_variable,
+    snapshot.direction,
+    snapshot.is_salary || 0,
+    snapshot.transaction_date,
+    snapshot.source_type,
+    snapshot.category_id || null,
+    snapshot.updated_at,
+    snapshot.id,
+    userId,
+    expectedUpdatedAt
+  );
+}
+
+function deleteImportedEntry(userId, entryId, expectedUpdatedAt) {
+  return db.prepare(`
+    DELETE FROM entries
+    WHERE id = ? AND user_id = ? AND source_type = 'ofx' AND updated_at = ?
+  `).run(entryId, userId, expectedUpdatedAt);
 }
 
 function updateEntry(userId, entryId, payload) {
@@ -134,6 +240,7 @@ function updateEntryFromTemplate(userId, entryId, template, updatedAt) {
       cycle = ?,
       payment_method = ?,
       is_variable = ?,
+      category_id = ?,
       updated_at = ?
     WHERE id = ? AND user_id = ?
   `).run(
@@ -142,6 +249,7 @@ function updateEntryFromTemplate(userId, entryId, template, updatedAt) {
     template.cycle,
     template.payment_method,
     template.is_variable,
+    template.category_id || null,
     updatedAt,
     entryId,
     userId
@@ -150,6 +258,22 @@ function updateEntryFromTemplate(userId, entryId, template, updatedAt) {
 
 function deleteEntry(userId, entryId) {
   db.prepare("DELETE FROM entries WHERE id = ? AND user_id = ?").run(entryId, userId);
+}
+
+function updateIncomeClassification(userId, entryId, isSalary, updatedAt) {
+  return db.prepare(`
+    UPDATE entries
+    SET is_salary = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND direction = 'income'
+  `).run(isSalary ? 1 : 0, updatedAt, entryId, userId);
+}
+
+function deleteEntriesByMonthAndDirections(userId, monthKey, directions) {
+  const placeholders = directions.map(() => "?").join(",");
+  return db.prepare(`
+    DELETE FROM entries
+    WHERE user_id = ? AND month_key = ? AND direction IN (${placeholders})
+  `).run(userId, monthKey, ...directions);
 }
 
 function deleteEntriesByIds(ids) {
@@ -179,11 +303,19 @@ module.exports = {
   listEntryIdsByTemplateInMonth,
   listDuplicateTemplateEntryGroups,
   insertEntryFromTemplate,
+  listPendingExpenseEntries,
+  findEntryForImport,
+  insertImportedEntry,
+  applyImportedExpenseToEntry,
+  restoreEntryAfterImport,
+  deleteImportedEntry,
   updateEntry,
   updateEntryObservation,
   updateEntriesBulk,
   updateEntryFromTemplate,
   deleteEntry,
+  updateIncomeClassification,
+  deleteEntriesByMonthAndDirections,
   deleteEntriesByIds,
   deleteEntriesByTemplateAndMonth,
   deleteEntriesByMonth,

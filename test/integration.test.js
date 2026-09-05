@@ -120,6 +120,11 @@ test("mes pode nascer somente com salario e inicializar gastos fixos depois", as
   templateA = template.payload.templates[0];
   assert.ok(entryA?.id);
 
+  const beforeTemplateStart = await request("/api/bootstrap?month=2026-08", { session: userA });
+  assert.equal(beforeTemplateStart.status, 200);
+  assert.equal(beforeTemplateStart.payload.templates.some((item) => item.id === templateA.id), false);
+  assert.equal(template.payload.templates.some((item) => item.id === templateA.id), true);
+
   const salaryOnly = await request("/api/months", {
     method: "POST",
     body: { monthKey: "2026-10", salary: 5100, includeFixedEntries: false },
@@ -176,6 +181,7 @@ test("mes fechado bloqueia mutacoes e reabertura restaura o acesso", async () =>
     request(`/api/entries/${entryA.id}`, { method: "PATCH", body: { amount: 1300, cycle: "Quinzena", status: "paid" }, session: userA }),
     request(`/api/entries/${entryA.id}/observation`, { method: "PATCH", body: { observation: "Bloqueada" }, session: userA }),
     request(`/api/entries/${entryA.id}`, { method: "DELETE", session: userA }),
+    request("/api/months/2026-09/entries", { method: "DELETE", body: { directions: ["expense"] }, session: userA }),
     request("/api/templates", { method: "POST", body: { name: "Novo", amount: 10, cycle: "Quinzena", paymentMethod: "Pix", observation: "", startMonth: "2026-09", isVariable: false, monthKey: "2026-09" }, session: userA }),
     request(`/api/templates/${templateA.id}`, { method: "PATCH", body: { name: "Aluguel alterado", amount: 1300, cycle: "Inicio Do Mes", paymentMethod: "Pix", observation: "", startMonth: "2026-09", isVariable: false, monthKey: "2026-09" }, session: userA }),
     request(`/api/templates/${templateA.id}/observation`, { method: "PATCH", body: { observation: "Bloqueada", monthKey: "2026-09" }, session: userA }),
@@ -255,6 +261,374 @@ test("falha no segundo item do lote faz rollback da transacao inteira", async ()
   const unchangedSecond = bootstrap.payload.month.entries.find((entry) => entry.id === secondEntry.id);
   assert.equal(unchangedSecond.amount, 50);
   assert.equal(unchangedSecond.status, "pending");
+});
+
+test("exclusao em massa permite selecionar gastos e receitas do mes", async () => {
+  const bulkUser = await register("usuario-limpeza", "usuario-limpeza@example.com");
+  await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-08", salary: 4000, includeFixedEntries: false },
+    session: bulkUser,
+  });
+
+  await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Internet",
+      amount: 120,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Pix",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: bulkUser,
+  });
+
+  const ofx = buildBankOfx([{ type: "CREDIT", date: "20260805120000", amount: "850.00", fitId: "income-cleanup-1", name: "Freelance" }]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: ofx,
+    contentType: "application/x-ofx",
+    headers: { "X-File-Name": encodeURIComponent("receita-agosto.ofx"), "X-Import-Directions": "income" },
+    session: bulkUser,
+  });
+  assert.equal(preview.status, 201);
+  const incomeItem = preview.payload.import.items[0];
+  const imported = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: {
+      decisions: [{
+        itemId: incomeItem.id,
+        action: "salary",
+        description: incomeItem.description,
+        cycle: incomeItem.suggestedCycle,
+        paymentMethod: incomeItem.paymentMethod,
+        categoryId: incomeItem.suggestedCategoryId,
+      }],
+    },
+    session: bulkUser,
+  });
+  assert.equal(imported.status, 200);
+
+  const expensesDeleted = await request("/api/months/2026-08/entries", {
+    method: "DELETE", body: { directions: ["expense"] }, session: bulkUser,
+  });
+  assert.equal(expensesDeleted.status, 200);
+  assert.equal(expensesDeleted.payload.month.entries.filter((entry) => entry.direction !== "income").length, 0);
+  assert.equal(expensesDeleted.payload.month.entries.filter((entry) => entry.direction === "income").length, 1);
+  assert.equal(expensesDeleted.payload.templates.some((template) => template.name === "Internet"), true);
+
+  await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Streaming",
+      amount: 45,
+      cycle: "Quinzena",
+      paymentMethod: "Cartao",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: bulkUser,
+  });
+
+  const allDeleted = await request("/api/months/2026-08/entries", {
+    method: "DELETE", body: { directions: ["expense", "income"] }, session: bulkUser,
+  });
+  assert.equal(allDeleted.status, 200);
+  assert.equal(allDeleted.payload.month.entries.length, 0);
+  assert.equal(allDeleted.payload.templates.some((template) => template.name === "Internet"), true);
+  assert.equal(allDeleted.payload.templates.some((template) => template.name === "Streaming"), true);
+
+  const reimportPreview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: ofx,
+    contentType: "application/x-ofx",
+    headers: { "X-File-Name": encodeURIComponent("receita-agosto.ofx"), "X-Import-Directions": "income" },
+    session: bulkUser,
+  });
+  assert.equal(reimportPreview.status, 201);
+  assert.equal(reimportPreview.payload.import.items[0].duplicate, false);
+  assert.equal(reimportPreview.payload.import.items[0].salarySuggested, true);
+});
+
+test("importacao OFX concilia, distribui meses, evita duplicidade e pode ser desfeita", async () => {
+  const bankUser = await register("usuario-ofx", "usuario-ofx@example.com");
+  const month = await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-08", salary: 5000, includeFixedEntries: false },
+    session: bankUser,
+  });
+  assert.equal(month.status, 201);
+
+  const template = await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Mercado Teste",
+      amount: 150.75,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Pix",
+      observation: "Compra mensal",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: bankUser,
+  });
+  const existingEntry = template.payload.month.entries.find((entry) => entry.name === "Mercado Teste");
+  assert.ok(existingEntry?.id);
+
+  const ofx = buildBankOfx([
+    { type: "DEBIT", date: "20260805", amount: "-150.75", fitId: "expense-match", name: "Mercado Teste" },
+    { type: "CREDIT", date: "20260810", amount: "2500.00", fitId: "salary", name: "Salario" },
+    { type: "CREDIT", date: "20260820", amount: "300.00", fitId: "extra-income", name: "Freelance" },
+    { type: "DEBIT", date: "20260918", amount: "-50.00", fitId: "expense-new", name: "Farmacia" },
+  ]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    session: bankUser,
+  });
+  assert.equal(preview.status, 201);
+  assert.equal(preview.payload.import.status, "draft");
+  assert.equal(preview.payload.import.items.length, 4);
+  const previewByExternalId = Object.fromEntries(preview.payload.import.items.map((item) => [item.externalId, item]));
+  assert.equal(previewByExternalId["expense-match"].suggestedEntryId, existingEntry.id);
+  assert.equal(previewByExternalId["expense-new"].monthKey, "2026-09");
+  assert.equal(previewByExternalId["expense-match"].categoryName, "Mercado");
+  assert.equal(previewByExternalId["expense-new"].categoryName, "Saúde");
+  assert.equal(previewByExternalId.salary.salarySuggested, true);
+  assert.equal(previewByExternalId["extra-income"].salarySuggested, false);
+
+  const categories = await request("/api/categories", { session: bankUser });
+  const transportCategory = categories.payload.categories.find((category) => category.slug === "transporte");
+  assert.ok(transportCategory?.id);
+
+  const decisions = preview.payload.import.items.map((item) => {
+    const base = {
+      itemId: item.id,
+      description: item.description,
+      cycle: item.suggestedCycle,
+      paymentMethod: item.paymentMethod,
+      categoryId: item.suggestedCategoryId,
+    };
+    if (item.externalId === "expense-match") return { ...base, action: "match", entryId: existingEntry.id, categoryId: transportCategory.id, rememberCategory: true };
+    if (item.externalId === "salary") return { ...base, action: "salary" };
+    if (item.externalId === "extra-income") return { ...base, action: "income" };
+    return { ...base, action: "create" };
+  });
+  const confirmed = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: { decisions },
+    session: bankUser,
+  });
+  assert.equal(confirmed.status, 200);
+  assert.equal(confirmed.payload.import.status, "completed");
+
+  const august = await request("/api/bootstrap?month=2026-08", { session: bankUser });
+  assert.equal(august.payload.month.summary.salary, 2500);
+  assert.equal(august.payload.month.summary.salaryReceived, 2500);
+  assert.equal(august.payload.month.summary.extraIncome, 300);
+  assert.equal(august.payload.month.summary.available, 2800);
+  const reconciled = august.payload.month.entries.find((entry) => entry.id === existingEntry.id);
+  assert.equal(reconciled.status, "paid");
+  assert.equal(reconciled.sourceType, "ofx");
+  assert.equal(reconciled.transactionDate, "2026-08-05");
+  assert.equal(reconciled.categoryName, "Transporte");
+  assert.ok(august.payload.month.entries.some((entry) => entry.direction === "income" && entry.name === "Freelance"));
+  const salaryEntry = august.payload.month.entries.find((entry) => entry.direction === "income" && entry.name === "Salario");
+  assert.equal(salaryEntry.isSalary, true);
+
+  const asExtraIncome = await request(`/api/entries/${salaryEntry.id}/income-classification`, {
+    method: "PATCH", body: { isSalary: false }, session: bankUser,
+  });
+  assert.equal(asExtraIncome.status, 200);
+  assert.equal(asExtraIncome.payload.month.summary.salary, 0);
+  assert.equal(asExtraIncome.payload.month.summary.salaryReceived, 0);
+  assert.equal(asExtraIncome.payload.month.summary.extraIncome, 2800);
+
+  const asSalaryAgain = await request(`/api/entries/${salaryEntry.id}/income-classification`, {
+    method: "PATCH", body: { isSalary: true }, session: bankUser,
+  });
+  assert.equal(asSalaryAgain.status, 200);
+  assert.equal(asSalaryAgain.payload.month.summary.salary, 2500);
+  assert.equal(asSalaryAgain.payload.month.summary.salaryReceived, 2500);
+  assert.equal(asSalaryAgain.payload.month.summary.extraIncome, 300);
+
+  const september = await request("/api/bootstrap?month=2026-09", { session: bankUser });
+  assert.equal(september.payload.month.salaryDefined, false);
+  assert.equal(september.payload.month.fixedEntriesInitialized, false);
+  assert.ok(september.payload.month.entries.some((entry) => entry.name === "Farmacia" && entry.sourceType === "ofx"));
+
+  const learnedPreview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(buildBankOfx([
+      { type: "DEBIT", date: "20261005", amount: "-75.00", fitId: "learned-category", name: "Mercado Teste Loja 2" },
+    ]), "latin1"),
+    contentType: "application/x-ofx",
+    session: bankUser,
+  });
+  assert.equal(learnedPreview.status, 201);
+  assert.equal(learnedPreview.payload.import.items[0].categoryName, "Transporte");
+  assert.equal(learnedPreview.payload.import.items[0].categorySource, "learned");
+
+  const duplicatePreview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    session: bankUser,
+  });
+  assert.equal(duplicatePreview.status, 201);
+  assert.ok(duplicatePreview.payload.import.items.every((item) => item.duplicate));
+
+  const undone = await request(`/api/bank-imports/${preview.payload.import.id}/undo`, {
+    method: "POST",
+    body: {},
+    session: bankUser,
+  });
+  assert.equal(undone.status, 200);
+  assert.equal(undone.payload.import.status, "undone");
+
+  const restoredAugust = await request("/api/bootstrap?month=2026-08", { session: bankUser });
+  const restoredEntry = restoredAugust.payload.month.entries.find((entry) => entry.id === existingEntry.id);
+  assert.equal(restoredEntry.status, "pending");
+  assert.equal(restoredEntry.sourceType, "fixed");
+  assert.equal(restoredAugust.payload.month.summary.salary, 5000);
+  assert.equal(restoredAugust.payload.month.summary.salaryReceived, 0);
+  assert.equal(restoredAugust.payload.month.summary.extraIncome, 0);
+  const removedSeptember = await request("/api/bootstrap?month=2026-09", { session: bankUser });
+  assert.equal(removedSeptember.payload.months.some((item) => item.monthKey === "2026-09"), false);
+});
+
+test("importacao OFX permite escolher somente gastos ou receitas", async () => {
+  const bankUser = await register("usuario-ofx-filtro", "usuario-ofx-filtro@example.com");
+  const ofx = buildBankOfx([
+    { type: "DEBIT", date: "20260805", amount: "-25.00", fitId: "only-expense", name: "Uber" },
+    { type: "CREDIT", date: "20260810", amount: "100.00", fitId: "only-income", name: "Freelance" },
+  ]);
+  const response = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "expense" },
+    session: bankUser,
+  });
+  assert.equal(response.status, 201);
+  assert.equal(response.payload.import.items.length, 1);
+  assert.equal(response.payload.import.items[0].direction, "expense");
+  assert.equal(response.payload.import.items[0].categoryName, "Transporte");
+  assert.equal(response.payload.import.incomeTotal, 0);
+});
+
+test("salarios selecionados no OFX preenchem o salario de um mes novo", async () => {
+  const salaryUser = await register("usuario-salario-ofx", "usuario-salario-ofx@example.com");
+  const ofx = buildBankOfx([
+    { type: "CREDIT", date: "20260805", amount: "2100.00", fitId: "salary-part-1", name: "Adiantamento salario" },
+    { type: "CREDIT", date: "20260820", amount: "2900.00", fitId: "salary-part-2", name: "Pagamento salario" },
+    { type: "CREDIT", date: "20260825", amount: "250.00", fitId: "income-extra", name: "Reembolso" },
+  ]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST", rawBody: Buffer.from(ofx, "latin1"), contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "income" }, session: salaryUser,
+  });
+  assert.equal(preview.status, 201);
+  const decisions = preview.payload.import.items.map((item) => ({
+    itemId: item.id,
+    action: item.externalId.startsWith("salary-part") ? "salary" : "income",
+    description: item.description,
+    cycle: item.suggestedCycle,
+    paymentMethod: item.paymentMethod,
+    categoryId: item.suggestedCategoryId,
+  }));
+  const confirmed = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST", body: { decisions }, session: salaryUser,
+  });
+  assert.equal(confirmed.status, 200);
+
+  const august = await request("/api/bootstrap?month=2026-08", { session: salaryUser });
+  assert.equal(august.payload.month.salary, 5000);
+  assert.equal(august.payload.month.summary.salaryReceived, 5000);
+  assert.equal(august.payload.month.summary.extraIncome, 250);
+  assert.equal(august.payload.month.summary.available, 5250);
+  assert.equal(august.payload.month.entries.filter((entry) => entry.isSalary).length, 2);
+});
+
+test("reclassificar receita como salario preserva o salario anterior ao desfazer", async () => {
+  const user = await register("usuario-reclassifica", "usuario-reclassifica@example.com");
+  await request("/api/months", {
+    method: "POST", body: { monthKey: "2026-08", salary: 4000, includeFixedEntries: false }, session: user,
+  });
+  const ofx = buildBankOfx([{ type: "CREDIT", date: "20260810", amount: "850.00", fitId: "late-salary", name: "Credito empresa" }]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST", rawBody: Buffer.from(ofx, "latin1"), contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "income" }, session: user,
+  });
+  const item = preview.payload.import.items[0];
+  await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: { decisions: [{ itemId: item.id, action: "income", description: item.description, cycle: item.suggestedCycle, paymentMethod: item.paymentMethod, categoryId: item.suggestedCategoryId }] },
+    session: user,
+  });
+  const imported = await request("/api/bootstrap?month=2026-08", { session: user });
+  const entry = imported.payload.month.entries.find((row) => row.direction === "income");
+
+  const classified = await request(`/api/entries/${entry.id}/income-classification`, {
+    method: "PATCH", body: { isSalary: true }, session: user,
+  });
+  assert.equal(classified.payload.month.salary, 850);
+
+  const undone = await request(`/api/bank-imports/${preview.payload.import.id}/undo`, {
+    method: "POST", body: {}, session: user,
+  });
+  assert.equal(undone.status, 200);
+  const restored = await request("/api/bootstrap?month=2026-08", { session: user });
+  assert.equal(restored.payload.month.salary, 4000);
+  assert.equal(restored.payload.month.entries.length, 0);
+});
+
+test("categorias personalizadas podem ser criadas, editadas e inativadas", async () => {
+  const categoryUser = await register("usuario-categorias", "usuario-categorias@example.com");
+  const initial = await request("/api/categories", { session: categoryUser });
+  assert.ok(initial.payload.categories.some((category) => category.slug === "mercado"));
+
+  const created = await request("/api/categories", {
+    method: "POST",
+    body: { name: "Pets", color: "#AA55CC", direction: "expense" },
+    session: categoryUser,
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.payload.category.name, "Pets");
+
+  const updated = await request(`/api/categories/${created.payload.category.id}`, {
+    method: "PATCH",
+    body: { name: "Animais", color: "#BB66DD", direction: "expense" },
+    session: categoryUser,
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.payload.category.name, "Animais");
+
+  const removed = await request(`/api/categories/${created.payload.category.id}`, {
+    method: "DELETE",
+    session: categoryUser,
+  });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.payload.categories.some((category) => category.id === created.payload.category.id), false);
+});
+
+test("importacao bancaria rejeita arquivo OFX invalido", async () => {
+  const bankUser = await register("usuario-ofx-erro", "usuario-ofx-erro@example.com");
+  const response = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from("arquivo invalido"),
+    contentType: "application/x-ofx",
+    session: bankUser,
+  });
+  assert.equal(response.status, 400);
+  assert.equal(response.payload.error, "invalid_ofx");
 });
 
 test("troca obrigatoria de senha bloqueia APIs e renova a sessao", async () => {
@@ -360,6 +734,7 @@ async function request(pathname, options = {}) {
   const method = options.method || "GET";
   const session = options.session || {};
   const headers = { Origin: options.origin === undefined ? baseUrl : options.origin };
+  Object.assign(headers, options.headers || {});
   const cookie = options.cookie ?? session.cookie;
   const csrfToken = options.csrfToken ?? session.csrfToken;
   if (cookie) headers.Cookie = cookie;
@@ -377,6 +752,37 @@ async function request(pathname, options = {}) {
 
 function cookieFromResponse(response) {
   return String(response.headers.get("set-cookie") || "").split(";")[0];
+}
+
+function buildBankOfx(transactions) {
+  const statementTransactions = transactions.map((item) => [
+    "<STMTTRN>",
+    `<TRNTYPE>${item.type}`,
+    `<DTPOSTED>${item.date}120000[-3:BRT]`,
+    `<TRNAMT>${item.amount}`,
+    `<FITID>${item.fitId}`,
+    `<NAME>${item.name}`,
+    "</STMTTRN>",
+  ].join("\n")).join("\n");
+
+  return [
+    "OFXHEADER:100",
+    "DATA:OFXSGML",
+    "VERSION:102",
+    "SECURITY:NONE",
+    "ENCODING:USASCII",
+    "CHARSET:1252",
+    "COMPRESSION:NONE",
+    "OLDFILEUID:NONE",
+    "NEWFILEUID:NONE",
+    "",
+    "<OFX>",
+    "<SIGNONMSGSRSV1><SONRS><STATUS><CODE>0<SEVERITY>INFO</STATUS><DTSERVER>20260903120000[-3:BRT]<LANGUAGE>POR<FI><ORG>Banco Teste<FID>001</FI></SONRS></SIGNONMSGSRSV1>",
+    "<BANKMSGSRSV1><STMTTRNRS><TRNUID>1<STATUS><CODE>0<SEVERITY>INFO</STATUS><STMTRS><CURDEF>BRL<BANKACCTFROM><BANKID>001<ACCTID>12345678<ACCTTYPE>CHECKING</BANKACCTFROM><BANKTRANLIST><DTSTART>20260801000000[-3:BRT]<DTEND>20260930235959[-3:BRT]",
+    statementTransactions,
+    "</BANKTRANLIST><LEDGERBAL><BALAMT>1000<DTASOF>20260930235959[-3:BRT]</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1>",
+    "</OFX>",
+  ].join("\n");
 }
 
 async function startServer(port, overrides = {}) {

@@ -12,6 +12,13 @@ function serializeEntry(entry) {
     observation: entry.observation,
     status: entry.status,
     isVariable: Boolean(entry.is_variable),
+    direction: entry.direction || "expense",
+    isSalary: Boolean(entry.is_salary),
+    transactionDate: entry.transaction_date || "",
+    sourceType: entry.source_type || (entry.template_id ? "fixed" : "manual"),
+    categoryId: entry.category_id || null,
+    categoryName: entry.category_name || "Sem categoria",
+    categoryColor: entry.category_color || "#8C8492",
     createdAt: entry.created_at,
     updatedAt: entry.updated_at,
   };
@@ -27,6 +34,7 @@ function serializeTemplate(template) {
     observation: template.observation,
     startMonth: normalizeMonthKey(template.start_month) || getCurrentMonthKey(),
     isVariable: Boolean(template.is_variable),
+    categoryId: template.category_id || null,
     createdAt: template.created_at,
   };
 }

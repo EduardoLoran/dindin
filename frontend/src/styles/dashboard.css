@@ -275,6 +275,51 @@
   border-radius: 15px;
 }
 
+.value-privacy-toggle {
+  display: inline-flex;
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 14px 7px 8px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 15px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.73rem;
+  font-weight: 700;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+
+.value-privacy-toggle:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: 0 8px 24px rgba(61, 39, 70, 0.08);
+  transform: translateY(-1px);
+}
+
+.value-privacy-toggle:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-primary) 24%, transparent);
+  outline-offset: 2px;
+}
+
+.value-privacy-toggle[aria-pressed="true"] {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+}
+
+.value-privacy-toggle__icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  color: var(--color-primary);
+  background: var(--color-info-soft);
+  border-radius: 11px;
+  place-items: center;
+}
+
 .user-menu {
   position: relative;
 }
@@ -505,7 +550,7 @@
 
 .dashboard-summary {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -1449,6 +1494,8 @@
 @media (max-width: 1020px) {
   .dashboard-grid--insights { grid-template-columns: 1fr; }
   .budget-panel__content { grid-template-columns: 150px minmax(0, 1fr); }
+  .value-privacy-toggle { width: 50px; padding: 7px; justify-content: center; }
+  .value-privacy-toggle > span:last-child { display: none; }
 }
 
 @media (max-width: 900px) {
@@ -1469,8 +1516,11 @@
   .app-topbar .app-period-select .month-select__button { min-height: 44px; padding: 5px 9px; }
   .app-topbar .app-period-select .month-select__icon { width: 34px; height: 34px; }
   .app-topbar .theme-toggle > span:last-child,
+  .value-privacy-toggle > span:last-child,
   .user-menu__identity { display: none; }
   .app-topbar .theme-toggle { width: 42px; padding: 6px; justify-content: center; }
+  .value-privacy-toggle { width: 42px; min-height: 44px; padding: 5px; }
+  .value-privacy-toggle__icon { width: 32px; height: 32px; flex-basis: 32px; }
   .user-menu__button { min-height: 44px; padding: 3px 7px 3px 4px; }
   .user-avatar { width: 35px; height: 35px; }
   .dashboard-hero { align-items: stretch; flex-direction: column; gap: 20px; }

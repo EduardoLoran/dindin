@@ -25,7 +25,7 @@ const monthStateConfirmOpen = ref(false);
 
 const month = computed(() => dashboard.value?.month || null);
 const summary = computed(() => month.value?.summary || {
-  salary: 0, total: 0, paid: 0, pending: 0, balance: 0, monthStartProjection: 0, quinzenaProjection: 0,
+  salary: 0, salaryReceived: 0, extraIncome: 0, available: 0, total: 0, paid: 0, pending: 0, balance: 0, monthStartProjection: 0, quinzenaProjection: 0,
 });
 const entries = computed(() => month.value?.entries || []);
 const monthLabel = computed(() => formatMonth(selectedMonth.value || dashboard.value?.activeMonth));
@@ -40,15 +40,18 @@ const greeting = computed(() => {
 
 const summaryCards = computed(() => [
   { label: "Salário", value: formatCurrency(summary.value.salary), meta: "Base disponível no mês", icon: "wallet", tone: "primary" },
-  { label: "Total previsto", value: formatCurrency(summary.value.total), meta: `${entries.value.length} lançamento(s) no período`, icon: "receipt", tone: "violet" },
-  { label: "Pago ou guardado", value: formatCurrency(summary.value.paid), meta: "Valores já organizados", icon: "check", tone: "success" },
+  { label: "Receitas extras", value: formatCurrency(summary.value.extraIncome), meta: "Entradas importadas", icon: "income", tone: "success" },
+  { label: "Total disponível", value: formatCurrency(summary.value.available), meta: "Salário e outras receitas", icon: "trending", tone: "violet" },
+  { label: "Gastos previstos", value: formatCurrency(summary.value.total), meta: `${expenses.value.length} gasto(s) no período`, icon: "receipt", tone: "warning" },
   { label: "Pendente", value: formatCurrency(summary.value.pending), meta: "Compromissos em aberto", icon: "clock", tone: "warning" },
-  { label: "Saldo projetado", value: formatCurrency(summary.value.balance), meta: "Salário menos valores previstos", icon: "trending", tone: summary.value.balance >= 0 ? "balance" : "danger" },
+  { label: "Saldo projetado", value: formatCurrency(summary.value.balance), meta: "Receitas menos gastos", icon: "trending", tone: summary.value.balance >= 0 ? "balance" : "danger" },
 ]);
 
+const expenses = computed(() => entries.value.filter((entry) => entry.direction !== "income"));
+
 const budgetPercent = computed(() => {
-  if (summary.value.salary <= 0) return 0;
-  return Math.min(100, Math.round((summary.value.total / summary.value.salary) * 100));
+  if (summary.value.available <= 0) return 0;
+  return Math.min(100, Math.round((summary.value.total / summary.value.available) * 100));
 });
 const paidPercent = computed(() => {
   if (summary.value.total <= 0) return 0;
@@ -66,7 +69,8 @@ const recentEntries = computed(() => [...entries.value]
   })
   .slice(0, 6));
 
-function statusLabel(status) {
+function statusLabel(status, direction = "expense") {
+  if (direction === "income" && status === "paid") return "Recebido";
   return { pending: "Pendente", paid: "Pago", saved: "Guardado" }[status] || status;
 }
 
@@ -219,7 +223,7 @@ onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleG
       <section class="dashboard-grid dashboard-grid--activity">
         <article class="dashboard-panel entries-panel">
           <div class="panel-heading"><div><p class="dashboard-eyebrow">Atividade</p><h2>Lançamentos em destaque</h2></div><RouterLink to="/lancamentos">Ver lançamentos <AppIcon name="arrow-right" :size="16" /></RouterLink></div>
-          <div v-if="recentEntries.length" class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Descrição</th><th>Ciclo</th><th>Status</th><th>Valor</th></tr></thead><tbody><tr v-for="entry in recentEntries" :key="entry.id"><td><span class="entry-icon"><AppIcon name="receipt" :size="17" /></span><div><strong>{{ entry.name }}</strong><small>{{ entry.paymentMethod || "Não informado" }}</small></div></td><td>{{ entry.cycle }}</td><td><span class="status-chip" :class="`status-chip--${statusTone(entry.status)}`">{{ statusLabel(entry.status) }}</span></td><td>{{ formatCurrency(entry.amount) }}</td></tr></tbody></table></div>
+          <div v-if="recentEntries.length" class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>Descrição</th><th>Tipo</th><th>Status</th><th>Valor</th></tr></thead><tbody><tr v-for="entry in recentEntries" :key="entry.id"><td><span class="entry-icon"><AppIcon :name="entry.direction === 'income' ? 'income' : 'receipt'" :size="17" /></span><div><strong>{{ entry.name }}</strong><small>{{ entry.paymentMethod || "Não informado" }}</small></div></td><td>{{ entry.direction === "income" ? "Receita" : "Gasto" }}</td><td><span class="status-chip" :class="`status-chip--${statusTone(entry.status)}`">{{ statusLabel(entry.status, entry.direction) }}</span></td><td>{{ formatCurrency(entry.amount) }}</td></tr></tbody></table></div>
           <div v-else class="dashboard-empty"><span><AppIcon name="receipt" :size="28" /></span><h3>Nenhum lançamento neste mês.</h3><p>Use seus cadastros para começar a planejar.</p><RouterLink to="/cadastros">Abrir cadastros</RouterLink></div>
         </article>
 

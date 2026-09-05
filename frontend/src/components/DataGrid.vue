@@ -14,8 +14,14 @@ let table = null;
 let externalFilter = null;
 const valueFilters = new Map();
 
-onMounted(buildTable);
-onBeforeUnmount(destroyTable);
+onMounted(() => {
+  buildTable();
+  window.addEventListener("dindin-value-privacy-change", refreshSensitiveValues);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("dindin-value-privacy-change", refreshSensitiveValues);
+  destroyTable();
+});
 
 watch(() => props.refreshKey, buildTable);
 watch(() => props.rows, async (rows) => {
@@ -66,7 +72,7 @@ async function buildTable() {
   table.on("cellEdited", (cell) => emit("cell-edited", cell.getRow().getData(), cell.getField(), cell.getOldValue()));
   table.on("cellClick", (_event, cell) => emitSelectedCell(cell));
   table.on("rangeChanged", (range) => {
-    const [cell] = range.getCells();
+    const cell = range.getCells().flat(Infinity).find((item) => typeof item?.getField === "function");
     if (cell) emitSelectedCell(cell);
   });
   table.on("dataFiltered", (_filters, rows) => emit("data-filtered", rows.map((row) => row.getData())));
@@ -108,6 +114,21 @@ function buildValueFilterPopup(column, options, onRendered) {
   popup.className = "dindin-column-filter";
   popup.setAttribute("aria-label", `Filtro da coluna ${column.getDefinition().title}`);
 
+  const sortActions = document.createElement("div");
+  sortActions.className = "dindin-column-filter__sort-actions";
+  const currentSort = table?.getSorters?.().find((sorter) => sorter.field === field)?.dir;
+  const sortAscending = popupButton(options.sortAscendingLabel || "Ordenar crescente", () => {
+    table?.setSort(field, "asc");
+    closeColumnPopup();
+  });
+  const sortDescending = popupButton(options.sortDescendingLabel || "Ordenar decrescente", () => {
+    table?.setSort(field, "desc");
+    closeColumnPopup();
+  });
+  sortAscending.classList.toggle("is-active", currentSort === "asc");
+  sortDescending.classList.toggle("is-active", currentSort === "desc");
+  sortActions.append(sortAscending, sortDescending);
+
   const filterLabel = document.createElement("strong");
   filterLabel.className = "dindin-column-filter__label";
   filterLabel.textContent = "Filtrar por valor:";
@@ -135,7 +156,7 @@ function buildValueFilterPopup(column, options, onRendered) {
   const checkboxByKey = new Map();
   values.forEach((item) => {
     const label = document.createElement("label");
-    label.dataset.search = item.label.toLocaleLowerCase("pt-BR");
+    label.dataset.search = normalizeSearchText(item.label);
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = selectedKeys.has(item.key);
@@ -156,7 +177,7 @@ function buildValueFilterPopup(column, options, onRendered) {
   empty.hidden = true;
 
   search.addEventListener("input", () => {
-    const term = search.value.trim().toLocaleLowerCase("pt-BR");
+    const term = normalizeSearchText(search.value.trim());
     let visible = 0;
     list.querySelectorAll("label").forEach((label) => {
       const matches = !term || label.dataset.search.includes(term);
@@ -179,7 +200,7 @@ function buildValueFilterPopup(column, options, onRendered) {
   apply.className = "dindin-column-filter__apply";
   footer.append(apply, cancel);
 
-  popup.append(filterLabel, search, selectionActions, list, empty, footer);
+  popup.append(sortActions, filterLabel, search, selectionActions, list, empty, footer);
   onRendered(() => search.focus());
   return popup;
 
@@ -194,9 +215,23 @@ function uniqueColumnValues(field, options) {
   for (const row of table?.getData() || props.rows) {
     const value = row[field];
     const key = valueKey(value);
-    if (!byKey.has(key)) byKey.set(key, { key, value, label: formatter(value, row) });
+    const formatted = formatter(value, row);
+    const label = formatted === undefined || formatted === null || formatted === "" ? defaultValueLabel(value) : String(formatted);
+    if (!byKey.has(key)) byKey.set(key, { key, value, label });
   }
   return [...byKey.values()].sort((left, right) => left.label.localeCompare(right.label, "pt-BR", { numeric: true }));
+}
+
+function refreshSensitiveValues() {
+  table?.getRows().forEach((row) => row.reformat());
+  table?.redraw(true);
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR");
 }
 
 function defaultValueLabel(value) {

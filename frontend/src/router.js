@@ -8,6 +8,7 @@ import ResetPasswordView from "./views/ResetPasswordView.vue";
 import TemplatesView from "./views/TemplatesView.vue";
 import DetailsView from "./views/DetailsView.vue";
 import FixedExpensesView from "./views/FixedExpensesView.vue";
+import BankImportsView from "./views/BankImportsView.vue";
 import AdminUsersView from "./views/AdminUsersView.vue";
 import ForcePasswordChangeView from "./views/ForcePasswordChangeView.vue";
 
@@ -25,6 +26,7 @@ const router = createRouter({
     { path: "/lancamentos", name: "entries", component: () => import("./views/EntriesView.vue"), meta: { layout: "dashboard", requiresAuth: true, title: "Lançamentos" } },
     { path: "/detalhes", name: "details", component: DetailsView, meta: { layout: "dashboard", requiresAuth: true, title: "Detalhes" } },
     { path: "/gastos-fixos", name: "fixed-expenses", component: FixedExpensesView, meta: { layout: "dashboard", requiresAuth: true, title: "Gastos fixos" } },
+    { path: "/importacao-bancaria", name: "bank-imports", component: BankImportsView, meta: { layout: "dashboard", requiresAuth: true, title: "Importação bancária" } },
     { path: "/admin/usuarios", name: "admin-users", component: AdminUsersView, meta: { layout: "dashboard", requiresAuth: true, requiresAdmin: true, title: "Administração" } },
     { path: "/:pathMatch(.*)*", redirect: "/login" },
   ],

@@ -11,12 +11,14 @@ import { changePassword, updateProfile } from "../api/auth";
 import { getDashboard } from "../api/dashboard";
 import { useGlobalPeriod } from "../composables/useGlobalPeriod";
 import { endSession, setAuthenticatedUser, useSession } from "../composables/useSession";
+import { useValuePrivacy } from "../composables/useValuePrivacy";
 
 const SIDEBAR_KEY = "dindin-sidebar-collapsed";
 const route = useRoute();
 const router = useRouter();
 const { user } = useSession();
 const { selectedMonth, setSelectedMonth, changeSelectedMonth } = useGlobalPeriod();
+const { valuesHidden, toggleValuesVisibility } = useValuePrivacy();
 const mobileOpen = ref(false);
 const collapsed = ref(window.localStorage.getItem(SIDEBAR_KEY) === "true");
 const signingOut = ref(false);
@@ -35,6 +37,7 @@ const navItems = computed(() => [
   { label: "Lançamentos", href: "/lancamentos", icon: "entries", modern: true },
   { label: "Detalhes", href: "/detalhes", icon: "details", modern: true },
   { label: "Gastos fixos", href: "/gastos-fixos", icon: "fixed", modern: true },
+  { label: "Importação bancária", href: "/importacao-bancaria", icon: "bank-import", modern: true },
   ...(user.value?.isAdmin ? [{ label: "Administração", href: "/admin/usuarios", icon: "admin", modern: true }] : []),
 ]);
 
@@ -164,6 +167,17 @@ onMounted(loadPeriods);
         </div>
 
         <div class="app-topbar__actions">
+          <button
+            class="value-privacy-toggle"
+            type="button"
+            :aria-label="valuesHidden ? 'Mostrar valores financeiros' : 'Ocultar valores financeiros'"
+            :aria-pressed="valuesHidden"
+            :title="valuesHidden ? 'Mostrar valores' : 'Ocultar valores'"
+            @click="toggleValuesVisibility"
+          >
+            <span class="value-privacy-toggle__icon"><AppIcon :name="valuesHidden ? 'eye-off' : 'eye'" :size="18" /></span>
+            <span>{{ valuesHidden ? "Mostrar valores" : "Ocultar valores" }}</span>
+          </button>
           <ThemeToggle />
           <Menu as="div" class="user-menu">
             <MenuButton class="user-menu__button">

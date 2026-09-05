@@ -9,5 +9,8 @@
     "dev:frontend": "npm --prefix frontend run dev",
     "build:frontend": "npm --prefix frontend run build",
     "build": "npm run build:frontend"
+  },
+  "dependencies": {
+    "@f-o-t/ofx": "^2.4.6"
   }
 }

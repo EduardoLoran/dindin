@@ -12,6 +12,9 @@ const {
 const { hashPassword } = require("../lib/security");
 
 const MIGRATION_ID = "2026-08-security-month-locks";
+const BANK_IMPORT_MIGRATION_ID = "2026-09-bank-imports";
+const CATEGORY_MIGRATION_ID = "2026-09-entry-categories";
+const INCOME_CLASSIFICATION_MIGRATION_ID = "2026-09-income-classification";
 
 function initializeDatabase() {
   db.exec("PRAGMA foreign_keys = ON;");
@@ -21,8 +24,17 @@ function initializeDatabase() {
   const migrationAlreadyApplied = hasTable("schema_migrations") && Boolean(
     db.prepare("SELECT id FROM schema_migrations WHERE id = ?").get(MIGRATION_ID)
   );
+  const bankImportMigrationAlreadyApplied = hasTable("schema_migrations") && Boolean(
+    db.prepare("SELECT id FROM schema_migrations WHERE id = ?").get(BANK_IMPORT_MIGRATION_ID)
+  );
+  const categoryMigrationAlreadyApplied = hasTable("schema_migrations") && Boolean(
+    db.prepare("SELECT id FROM schema_migrations WHERE id = ?").get(CATEGORY_MIGRATION_ID)
+  );
+  const incomeClassificationMigrationAlreadyApplied = hasTable("schema_migrations") && Boolean(
+    db.prepare("SELECT id FROM schema_migrations WHERE id = ?").get(INCOME_CLASSIFICATION_MIGRATION_ID)
+  );
 
-  if (hasExistingApplicationTables && !migrationAlreadyApplied) {
+  if (hasExistingApplicationTables && (!migrationAlreadyApplied || !bankImportMigrationAlreadyApplied || !categoryMigrationAlreadyApplied || !incomeClassificationMigrationAlreadyApplied)) {
     backupDatabaseBeforeMigration();
   }
 
@@ -38,6 +50,18 @@ function initializeDatabase() {
     INSERT OR IGNORE INTO schema_migrations (id, applied_at)
     VALUES (?, ?)
   `).run(MIGRATION_ID, new Date().toISOString());
+  db.prepare(`
+    INSERT OR IGNORE INTO schema_migrations (id, applied_at)
+    VALUES (?, ?)
+  `).run(BANK_IMPORT_MIGRATION_ID, new Date().toISOString());
+  db.prepare(`
+    INSERT OR IGNORE INTO schema_migrations (id, applied_at)
+    VALUES (?, ?)
+  `).run(CATEGORY_MIGRATION_ID, new Date().toISOString());
+  db.prepare(`
+    INSERT OR IGNORE INTO schema_migrations (id, applied_at)
+    VALUES (?, ?)
+  `).run(INCOME_CLASSIFICATION_MIGRATION_ID, new Date().toISOString());
 
   ensureInitialAdminUser();
 }
@@ -69,6 +93,7 @@ function createTables() {
       month_key TEXT NOT NULL,
       salary_cents INTEGER NOT NULL DEFAULT 0,
       salary_defined INTEGER NOT NULL DEFAULT 0,
+      salary_source TEXT NOT NULL DEFAULT 'manual' CHECK(salary_source IN ('manual', 'imported')),
       fixed_entries_initialized INTEGER NOT NULL DEFAULT 1,
       closed_at TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
@@ -97,10 +122,12 @@ function createTables() {
       observation TEXT NOT NULL DEFAULT '',
       start_month TEXT NOT NULL DEFAULT '',
       is_variable INTEGER NOT NULL DEFAULT 0,
+      category_id TEXT,
       active INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS entries (
@@ -115,10 +142,16 @@ function createTables() {
       observation TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL CHECK(status IN ('pending', 'paid', 'saved')),
       is_variable INTEGER NOT NULL DEFAULT 0,
+      direction TEXT NOT NULL DEFAULT 'expense' CHECK(direction IN ('expense', 'income')),
+      is_salary INTEGER NOT NULL DEFAULT 0,
+      transaction_date TEXT NOT NULL DEFAULT '',
+      source_type TEXT NOT NULL DEFAULT 'manual' CHECK(source_type IN ('manual', 'fixed', 'ofx')),
+      category_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY (user_id, month_key) REFERENCES months(user_id, month_key) ON DELETE CASCADE,
-      FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE SET NULL
+      FOREIGN KEY (template_id) REFERENCES templates(id) ON DELETE SET NULL,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -143,6 +176,102 @@ function createTables() {
       created_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS bank_import_batches (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      file_hash TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('draft', 'completed', 'undone')),
+      bank_name TEXT NOT NULL DEFAULT '',
+      account_label TEXT NOT NULL DEFAULT '',
+      currency TEXT NOT NULL DEFAULT 'BRL',
+      date_from TEXT NOT NULL DEFAULT '',
+      date_to TEXT NOT NULL DEFAULT '',
+      expense_cents INTEGER NOT NULL DEFAULT 0,
+      income_cents INTEGER NOT NULL DEFAULT 0,
+      item_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      completed_at TEXT NOT NULL DEFAULT '',
+      undone_at TEXT NOT NULL DEFAULT '',
+      created_months_json TEXT NOT NULL DEFAULT '[]',
+      salary_snapshot_json TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS categories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#7A41C0',
+      direction TEXT NOT NULL DEFAULT 'expense' CHECK(direction IN ('expense', 'income', 'both')),
+      is_system INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (user_id, slug),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS category_rules (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      category_id TEXT NOT NULL,
+      match_type TEXT NOT NULL CHECK(match_type IN ('keyword', 'sic')),
+      pattern TEXT NOT NULL,
+      origin TEXT NOT NULL DEFAULT 'default' CHECK(origin IN ('default', 'learned')),
+      priority INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (user_id, match_type, pattern),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS bank_import_items (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      external_id TEXT NOT NULL DEFAULT '',
+      dedupe_key TEXT NOT NULL,
+      account_fingerprint TEXT NOT NULL,
+      account_label TEXT NOT NULL DEFAULT '',
+      posted_date TEXT NOT NULL,
+      month_key TEXT NOT NULL,
+      description TEXT NOT NULL,
+      memo TEXT NOT NULL DEFAULT '',
+      amount_cents INTEGER NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('expense', 'income')),
+      transaction_type TEXT NOT NULL DEFAULT '',
+      currency TEXT NOT NULL DEFAULT 'BRL',
+      payment_method TEXT NOT NULL DEFAULT '',
+      sic TEXT NOT NULL DEFAULT '',
+      payee_id TEXT NOT NULL DEFAULT '',
+      extended_name TEXT NOT NULL DEFAULT '',
+      suggested_entry_id TEXT,
+      suggested_category_id TEXT,
+      category_id TEXT,
+      category_source TEXT NOT NULL DEFAULT '',
+      category_confidence INTEGER NOT NULL DEFAULT 0,
+      decision TEXT NOT NULL DEFAULT '',
+      linked_entry_id TEXT,
+      previous_entry_json TEXT NOT NULL DEFAULT '',
+      applied_entry_updated_at TEXT NOT NULL DEFAULT '',
+      duplicate INTEGER NOT NULL DEFAULT 0,
+      blocked_reason TEXT NOT NULL DEFAULT '',
+      committed_at TEXT NOT NULL DEFAULT '',
+      undone_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (batch_id) REFERENCES bank_import_batches(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (suggested_entry_id) REFERENCES entries(id) ON DELETE SET NULL,
+      FOREIGN KEY (suggested_category_id) REFERENCES categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (linked_entry_id) REFERENCES entries(id) ON DELETE SET NULL
+    );
   `);
 }
 
@@ -158,7 +287,26 @@ function migrateExistingTables() {
   ensureColumn("users", "last_login_at", "TEXT NOT NULL DEFAULT ''");
   ensureColumn("months", "fixed_entries_initialized", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn("months", "closed_at", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("months", "salary_source", "TEXT NOT NULL DEFAULT 'manual' CHECK(salary_source IN ('manual', 'imported'))");
   ensureColumn("templates", "observation", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("entries", "direction", "TEXT NOT NULL DEFAULT 'expense' CHECK(direction IN ('expense', 'income'))");
+  ensureColumn("entries", "is_salary", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn("entries", "transaction_date", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("entries", "source_type", "TEXT NOT NULL DEFAULT 'manual' CHECK(source_type IN ('manual', 'fixed', 'ofx'))");
+  ensureColumn("entries", "category_id", "TEXT REFERENCES categories(id) ON DELETE SET NULL");
+  ensureColumn("templates", "category_id", "TEXT REFERENCES categories(id) ON DELETE SET NULL");
+  ensureColumn("bank_import_items", "account_label", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "payment_method", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "sic", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "payee_id", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "extended_name", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "suggested_category_id", "TEXT REFERENCES categories(id) ON DELETE SET NULL");
+  ensureColumn("bank_import_items", "category_id", "TEXT REFERENCES categories(id) ON DELETE SET NULL");
+  ensureColumn("bank_import_items", "category_source", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("bank_import_items", "category_confidence", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn("bank_import_batches", "created_months_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn("bank_import_batches", "salary_snapshot_json", "TEXT NOT NULL DEFAULT '{}'");
+  db.prepare("UPDATE entries SET source_type = 'fixed' WHERE template_id IS NOT NULL AND source_type = 'manual'").run();
 }
 
 function ensureIndexes() {
@@ -169,9 +317,18 @@ function ensureIndexes() {
     CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_lookup ON password_reset_tokens(token_hash, expires_at, used_at);
     CREATE INDEX IF NOT EXISTS idx_templates_user_active ON templates(user_id, active, sort_order);
     CREATE INDEX IF NOT EXISTS idx_entries_user_month ON entries(user_id, month_key);
+    CREATE INDEX IF NOT EXISTS idx_entries_user_category ON entries(user_id, category_id, month_key);
+    CREATE INDEX IF NOT EXISTS idx_categories_user_active ON categories(user_id, active, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_category_rules_user_match ON category_rules(user_id, match_type, priority DESC);
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_expiry ON sessions(idle_expires_at, absolute_expires_at);
     CREATE INDEX IF NOT EXISTS idx_audit_events_user_date ON audit_events(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_bank_import_batches_user_date ON bank_import_batches(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_bank_import_items_batch ON bank_import_items(batch_id, posted_date, id);
+    CREATE INDEX IF NOT EXISTS idx_bank_import_items_user_month ON bank_import_items(user_id, month_key);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_import_items_active_dedupe
+      ON bank_import_items(user_id, dedupe_key)
+      WHERE committed_at <> '' AND undone_at = '';
     CREATE UNIQUE INDEX IF NOT EXISTS idx_entries_user_month_template_unique
       ON entries(user_id, month_key, template_id)
       WHERE template_id IS NOT NULL;

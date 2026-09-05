@@ -3,20 +3,28 @@ const { fromCents, getCurrentMonthKey, normalizeMonthKey, sumCents } = require("
 const { listEntries } = require("../repositories/entryRepository");
 const { getMonthRecord, listMonths } = require("../repositories/monthRepository");
 const { listTemplates } = require("../repositories/templateRepository");
+const { getImportedSalaryReceived } = require("../repositories/bankImportRepository");
+const { getCategories } = require("./categoryService");
 
-function buildSummary(entries, salaryCents) {
-  const total = sumCents(entries.map((entry) => entry.amount_cents));
-  const paid = sumCents(entries.filter((entry) => entry.status !== "pending").map((entry) => entry.amount_cents));
-  const pending = sumCents(entries.filter((entry) => entry.status === "pending").map((entry) => entry.amount_cents));
-  const monthStartProjection = sumCents(entries.filter((entry) => entry.cycle === "Inicio Do Mes").map((entry) => entry.amount_cents));
-  const quinzenaProjection = sumCents(entries.filter((entry) => entry.cycle === "Quinzena").map((entry) => entry.amount_cents));
+function buildSummary(entries, salaryCents, salaryReceivedCents = 0) {
+  const expenses = entries.filter((entry) => (entry.direction || "expense") === "expense");
+  const incomes = entries.filter((entry) => entry.direction === "income");
+  const total = sumCents(expenses.map((entry) => entry.amount_cents));
+  const extraIncome = sumCents(incomes.filter((entry) => !entry.is_salary).map((entry) => entry.amount_cents));
+  const paid = sumCents(expenses.filter((entry) => entry.status !== "pending").map((entry) => entry.amount_cents));
+  const pending = sumCents(expenses.filter((entry) => entry.status === "pending").map((entry) => entry.amount_cents));
+  const monthStartProjection = sumCents(expenses.filter((entry) => entry.cycle === "Inicio Do Mes").map((entry) => entry.amount_cents));
+  const quinzenaProjection = sumCents(expenses.filter((entry) => entry.cycle === "Quinzena").map((entry) => entry.amount_cents));
 
   return {
     salary: fromCents(salaryCents),
+    salaryReceived: fromCents(salaryReceivedCents),
+    extraIncome: fromCents(extraIncome),
+    available: fromCents(salaryCents + extraIncome),
     total: fromCents(total),
     paid: fromCents(paid),
     pending: fromCents(pending),
-    balance: fromCents(salaryCents - total),
+    balance: fromCents(salaryCents + extraIncome - total),
     monthStartProjection: fromCents(monthStartProjection),
     quinzenaProjection: fromCents(quinzenaProjection),
   };
@@ -25,10 +33,11 @@ function buildSummary(entries, salaryCents) {
 function buildBootstrapPayload(user, monthKey) {
   const month = getMonthRecord(user.id, monthKey);
   const entries = month ? listEntries(user.id, monthKey) : [];
-  const templates = listTemplates(user.id);
+  const resolvedMonthKey = month ? monthKey : normalizeMonthKey(monthKey) || getCurrentMonthKey();
+  const templates = listTemplates(user.id, resolvedMonthKey);
   const months = listMonths(user.id);
   const effectiveSalaryCents = month && Number(month.salary_defined) === 1 ? month.salary_cents : 0;
-  const resolvedMonthKey = month ? monthKey : normalizeMonthKey(monthKey) || getCurrentMonthKey();
+  const salaryReceivedCents = month ? getImportedSalaryReceived(user.id, monthKey) : 0;
 
   return {
     user: serializeUser(user),
@@ -41,7 +50,7 @@ function buildBootstrapPayload(user, monthKey) {
       fixedEntriesInitialized: Boolean(month?.fixed_entries_initialized),
       isClosed: Boolean(month?.closed_at),
       closedAt: String(month?.closed_at || ""),
-      summary: buildSummary(entries, effectiveSalaryCents),
+      summary: buildSummary(entries, effectiveSalaryCents, salaryReceivedCents),
       entries: entries.map(serializeEntry),
     },
     months: months.map((item) => ({
@@ -54,6 +63,7 @@ function buildBootstrapPayload(user, monthKey) {
       createdAt: item.created_at,
     })),
     templates: templates.map(serializeTemplate),
+    categories: getCategories(user.id),
   };
 }
 

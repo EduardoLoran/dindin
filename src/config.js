@@ -14,6 +14,8 @@ const SESSION_COOKIE = IS_PRODUCTION ? "__Host-dindin_session" : "dindin_session
 const SESSION_IDLE_SECONDS = positiveInteger(process.env.SESSION_IDLE_SECONDS, 30 * 60);
 const SESSION_ABSOLUTE_SECONDS = positiveInteger(process.env.SESSION_ABSOLUTE_SECONDS, 24 * 60 * 60);
 const JSON_BODY_LIMIT_BYTES = positiveInteger(process.env.JSON_BODY_LIMIT_BYTES, 512 * 1024);
+const OFX_FILE_LIMIT_BYTES = positiveInteger(process.env.OFX_FILE_LIMIT_BYTES, 5 * 1024 * 1024);
+const OFX_MAX_TRANSACTIONS = positiveInteger(process.env.OFX_MAX_TRANSACTIONS, 5000);
 const PUBLIC_URL = String(process.env.PUBLIC_URL || "").trim().replace(/\/+$/, "");
 const ALLOWED_ORIGINS = csvValues(process.env.ALLOWED_ORIGINS || PUBLIC_URL);
 const TRUST_PROXY = String(process.env.TRUST_PROXY ?? (IS_PRODUCTION ? "true" : "false")) === "true";
@@ -95,6 +97,8 @@ module.exports = {
   SESSION_IDLE_SECONDS,
   SESSION_ABSOLUTE_SECONDS,
   JSON_BODY_LIMIT_BYTES,
+  OFX_FILE_LIMIT_BYTES,
+  OFX_MAX_TRANSACTIONS,
   PUBLIC_URL,
   ALLOWED_ORIGINS,
   TRUST_PROXY,

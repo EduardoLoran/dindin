@@ -22,6 +22,18 @@ defineProps({
     <template v-else-if="name === 'fixed'">
       <path d="M4 6h16v14H4zM8 3v6M16 3v6M4 10h16" />
     </template>
+    <template v-else-if="name === 'bank-import'">
+      <path d="M3 10h18M5 10v8M9 10v8M15 10v8M19 10v8M3 18h18M12 3 3 8h18l-9-5Z" /><path d="M12 12v4M10 14l2 2 2-2" />
+    </template>
+    <template v-else-if="name === 'tag'">
+      <path d="M20 13 13 20 4 11V4h7l9 9Z" /><circle cx="8.5" cy="8.5" r="1.5" />
+    </template>
+    <template v-else-if="name === 'upload'">
+      <path d="M12 16V4M7 9l5-5 5 5M4 15v5h16v-5" />
+    </template>
+    <template v-else-if="name === 'income'">
+      <path d="M12 3v18M17 7.5C17 5.6 14.8 4 12 4S7 5.6 7 7.5 9.2 11 12 11s5 1.6 5 3.5S14.8 18 12 18s-5-1.6-5-3.5" />
+    </template>
     <template v-else-if="name === 'admin'">
       <circle cx="9" cy="8" r="4" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M17 11l1.2 1.2L21 9.5" />
     </template>
@@ -75,6 +87,12 @@ defineProps({
     </template>
     <template v-else-if="name === 'search'">
       <circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" />
+    </template>
+    <template v-else-if="name === 'eye'">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.5" />
+    </template>
+    <template v-else-if="name === 'eye-off'">
+      <path d="m3 3 18 18M10.6 6.2A9.8 9.8 0 0 1 12 6c6 0 9.5 6 9.5 6a15 15 0 0 1-2.1 2.8M6.2 6.2C3.8 8 2.5 12 2.5 12s3.5 6 9.5 6a9.7 9.7 0 0 0 3.3-.6M9.9 9.9a3 3 0 0 0 4.2 4.2" />
     </template>
     <template v-else-if="name === 'more'">
       <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />

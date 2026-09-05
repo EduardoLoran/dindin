@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { Listbox, ListboxButton, ListboxLabel, ListboxOption, ListboxOptions, TransitionRoot } from "@headlessui/vue";
 import AppIcon from "./AppIcon.vue";
-import { formatMonth } from "../utils/formatters";
+import { formatCurrency, formatMonth } from "../utils/formatters";
 
 const props = defineProps({
   modelValue: { type: String, default: "" },
@@ -33,7 +33,7 @@ function select(monthKey) {
           <div class="month-select__options-head"><span>Selecionar período</span><small>{{ options.length }} disponível(is)</small></div>
           <ListboxOption v-for="month in options" :key="month.monthKey" v-slot="{ active, selected }" :value="month.monthKey" as="template">
             <li :class="{ 'is-active': active, 'is-selected': selected }">
-              <span><b>{{ formatMonth(month.monthKey) }}</b><small v-if="month.salary !== undefined">Base: {{ Number(month.salary || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) }}</small></span>
+              <span><b>{{ formatMonth(month.monthKey) }}</b><small v-if="month.salary !== undefined">Base: {{ formatCurrency(month.salary) }}</small></span>
               <span class="month-select__check"><AppIcon v-if="selected" name="check" :size="16" /></span>
             </li>
           </ListboxOption>

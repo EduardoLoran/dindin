@@ -22,6 +22,7 @@ const APP_ROUTES = new Set([
   "/lancamentos",
   "/detalhes",
   "/gastos-fixos",
+  "/importacao-bancaria",
   "/admin/usuarios",
 ]);
 

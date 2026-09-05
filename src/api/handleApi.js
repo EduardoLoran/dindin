@@ -1,7 +1,7 @@
-const { ALLOWED_ORIGINS, IS_PRODUCTION, PUBLIC_URL, TURNSTILE_REQUIRED, TURNSTILE_SITE_KEY } = require("../config");
+const { ALLOWED_ORIGINS, IS_PRODUCTION, OFX_FILE_LIMIT_BYTES, PUBLIC_URL, TURNSTILE_REQUIRED, TURNSTILE_SITE_KEY } = require("../config");
 const { runInTransaction } = require("../db/schema");
 const { httpError } = require("../lib/errors");
-const { readJson, sendJson } = require("../lib/http");
+const { readBuffer, readJson, sendJson } = require("../lib/http");
 const { serializeUser } = require("../lib/serializers");
 const { verifyPassword } = require("../lib/security");
 const { getCurrentMonthKey } = require("../lib/values");
@@ -26,14 +26,17 @@ const {
 const { insertAuditEvent } = require("../repositories/auditRepository");
 const {
   deleteEntry,
+  deleteEntriesByMonthAndDirections,
   deleteEntriesByTemplateAndMonth,
   findEntryMonthById,
   listOwnedEntryIdsInMonth,
   updateEntriesBulk,
   updateEntry,
+  updateIncomeClassification,
   updateEntryObservation,
 } = require("../repositories/entryRepository");
-const { getMonthRecord, listMonths, updateMonthSalary } = require("../repositories/monthRepository");
+const { getMonthRecord, listMonths, syncImportedSalary, updateMonthSalary } = require("../repositories/monthRepository");
+const { ensureImportSalarySnapshotForEntry, releaseOrphanedImportItems, updateImportDecisionForEntry } = require("../repositories/bankImportRepository");
 const {
   createPasswordResetToken,
   deleteActivePasswordResetTokens,
@@ -62,6 +65,14 @@ const {
   updateUserByAdmin,
 } = require("../repositories/userRepository");
 const { buildBootstrapPayload } = require("../services/bootstrapService");
+const {
+  confirmBankImport,
+  getBankImport,
+  getBankImportHistory,
+  previewBankImport,
+  undoBankImport,
+} = require("../services/bankImportService");
+const { createCategory, editCategory, getCategories, removeCategory } = require("../services/categoryService");
 const { assertTurnstile, isTurnstileEnabled } = require("../services/turnstileService");
 const { createPasswordResetLink, deliverPasswordResetEmail } = require("../services/emailService");
 const {
@@ -92,7 +103,7 @@ async function handleApi(request, response, url) {
   assertHttpMethod(request.method);
   assertRouteMethod(request.method, url.pathname);
   assertAllowedOrigin(request);
-  assertJsonContentType(request);
+  assertJsonContentType(request, url.pathname);
 
   if (request.method === "GET" && url.pathname === "/api/public-config") {
     const turnstileEnabled = isTurnstileEnabled();
@@ -257,6 +268,73 @@ async function handlePasswordResetComplete(request, response) {
 
 async function handleAuthenticatedApi(request, response, url, session) {
   const user = session.user;
+
+  if (request.method === "POST" && url.pathname === "/api/bank-imports/ofx/preview") {
+    const buffer = await readBuffer(request, OFX_FILE_LIMIT_BYTES);
+    const filename = decodeHeaderValue(request.headers["x-file-name"] || "extrato.ofx");
+    const directions = parseImportDirections(request.headers["x-import-directions"]);
+    sendJson(response, 201, { import: await previewBankImport(user.id, buffer, filename, directions) });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/categories") {
+    sendJson(response, 200, { categories: getCategories(user.id) });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/categories") {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["name", "color", "direction"]);
+    sendJson(response, 201, { category: createCategory(user.id, body), categories: getCategories(user.id) });
+    return;
+  }
+
+  const categoryMatch = matchUuidPath(url.pathname, /^\/api\/categories\/([^/]+)$/);
+  if (request.method === "PATCH" && categoryMatch) {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["name", "color", "direction"]);
+    sendJson(response, 200, { category: editCategory(user.id, categoryMatch, body), categories: getCategories(user.id) });
+    return;
+  }
+
+  if (request.method === "DELETE" && categoryMatch) {
+    sendJson(response, 200, { ...removeCategory(user.id, categoryMatch), categories: getCategories(user.id) });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/bank-imports") {
+    const page = normalizePage(url.searchParams.get("page"));
+    const pageSize = normalizePageSize(url.searchParams.get("pageSize"));
+    sendJson(response, 200, getBankImportHistory(user.id, page, pageSize));
+    return;
+  }
+
+  const bankImportConfirmMatch = matchUuidPath(url.pathname, /^\/api\/bank-imports\/([^/]+)\/confirm$/);
+  if (request.method === "POST" && bankImportConfirmMatch) {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["decisions"]);
+    if (Array.isArray(body.decisions)) {
+      body.decisions.forEach((decision) => assertAllowedFields(decision, [
+        "itemId", "action", "entryId", "description", "cycle", "paymentMethod", "categoryId", "rememberCategory",
+      ]));
+    }
+    sendJson(response, 200, confirmBankImport(user.id, bankImportConfirmMatch, body.decisions));
+    return;
+  }
+
+  const bankImportUndoMatch = matchUuidPath(url.pathname, /^\/api\/bank-imports\/([^/]+)\/undo$/);
+  if (request.method === "POST" && bankImportUndoMatch) {
+    const body = await readJson(request);
+    assertAllowedFields(body, []);
+    sendJson(response, 200, undoBankImport(user.id, bankImportUndoMatch));
+    return;
+  }
+
+  const bankImportMatch = matchUuidPath(url.pathname, /^\/api\/bank-imports\/([^/]+)$/);
+  if (request.method === "GET" && bankImportMatch) {
+    sendJson(response, 200, { import: getBankImport(user.id, bankImportMatch) });
+    return;
+  }
 
   if (request.method === "GET" && url.pathname === "/api/bootstrap") {
     const monthKey = optionalQueryMonth(url.searchParams.get("month"));
@@ -431,6 +509,25 @@ async function handleAuthenticatedApi(request, response, url, session) {
     return;
   }
 
+  const incomeClassificationMatch = matchUuidPath(url.pathname, /^\/api\/entries\/([^/]+)\/income-classification$/);
+  if (request.method === "PATCH" && incomeClassificationMatch) {
+    const row = requireOwnedEntry(user.id, incomeClassificationMatch);
+    assertMonthOpen(user.id, row.month_key);
+    if (row.direction !== "income") throw httpError(400, "Apenas receitas podem ser classificadas como salario.", "invalid_entry_direction");
+    const body = await readJson(request);
+    assertAllowedFields(body, ["isSalary"]);
+    const isSalary = normalizeBoolean(body.isSalary, "Classificacao de salario");
+    const updatedAt = new Date().toISOString();
+    runInTransaction(() => {
+      if (isSalary) ensureImportSalarySnapshotForEntry(user.id, incomeClassificationMatch, row.month_key, getMonthRecord(user.id, row.month_key));
+      updateIncomeClassification(user.id, incomeClassificationMatch, isSalary, updatedAt);
+      updateImportDecisionForEntry(user.id, incomeClassificationMatch, isSalary ? "salary" : "income", updatedAt);
+      syncImportedSalary(user.id, row.month_key);
+    });
+    sendJson(response, 200, buildBootstrapPayload(user, row.month_key));
+    return;
+  }
+
   const entryMatch = matchUuidPath(url.pathname, /^\/api\/entries\/([^/]+)$/);
   if (request.method === "PATCH" && entryMatch) {
     const row = requireOwnedEntry(user.id, entryMatch);
@@ -446,8 +543,34 @@ async function handleAuthenticatedApi(request, response, url, session) {
   if (request.method === "DELETE" && entryMatch) {
     const row = requireOwnedEntry(user.id, entryMatch);
     assertMonthOpen(user.id, row.month_key);
-    deleteEntry(user.id, entryMatch);
+    runInTransaction(() => {
+      deleteEntry(user.id, entryMatch);
+      if (row.direction === "income") syncImportedSalary(user.id, row.month_key);
+      releaseOrphanedImportItems(user.id, new Date().toISOString());
+    });
     sendJson(response, 200, buildBootstrapPayload(user, row.month_key));
+    return;
+  }
+
+  const deleteMonthEntriesMatch = matchMonthPath(url.pathname, /^\/api\/months\/([^/]+)\/entries$/);
+  if (request.method === "DELETE" && deleteMonthEntriesMatch) {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["directions"]);
+    const directions = normalizeDeletionDirections(body.directions);
+    assertMonthOpen(user.id, deleteMonthEntriesMatch);
+    runInTransaction(() => {
+      const result = deleteEntriesByMonthAndDirections(user.id, deleteMonthEntriesMatch, directions);
+      if (directions.includes("income")) syncImportedSalary(user.id, deleteMonthEntriesMatch);
+      releaseOrphanedImportItems(user.id, new Date().toISOString());
+      insertAuditEvent({
+        userId: user.id,
+        eventType: "month_entries_deleted",
+        targetType: "month",
+        targetId: deleteMonthEntriesMatch,
+        metadata: { deletedCount: Number(result.changes || 0), directions },
+      });
+    });
+    sendJson(response, 200, buildBootstrapPayload(user, deleteMonthEntriesMatch));
     return;
   }
 
@@ -600,11 +723,15 @@ function assertAllowedOrigin(request) {
   throw httpError(403, "Origem nao permitida.", "origin_not_allowed");
 }
 
-function assertJsonContentType(request) {
+function assertJsonContentType(request, pathname) {
   if (!MUTATION_METHODS.has(request.method)) return;
   const contentLength = Number(request.headers["content-length"] || 0);
   if (request.method === "DELETE" && contentLength === 0) return;
   const contentType = String(request.headers["content-type"] || "").toLowerCase();
+  if (pathname === "/api/bank-imports/ofx/preview") {
+    if (contentType.startsWith("application/x-ofx") || contentType.startsWith("application/octet-stream")) return;
+    throw httpError(415, "Envie o arquivo como application/x-ofx.", "unsupported_media_type");
+  }
   if (!contentType.startsWith("application/json")) {
     throw httpError(415, "Use Content-Type application/json.", "unsupported_media_type");
   }
@@ -636,17 +763,53 @@ function allowedMethodsForPath(pathname) {
     "/api/salary": ["POST"],
     "/api/entries/bulk": ["PATCH"],
     "/api/templates": ["POST"],
+    "/api/categories": ["GET", "POST"],
+    "/api/bank-imports": ["GET"],
+    "/api/bank-imports/ofx/preview": ["POST"],
   };
   if (exactRoutes[pathname]) return exactRoutes[pathname];
   if (/^\/api\/admin\/users\/[^/]+$/.test(pathname)) return ["PATCH"];
   if (/^\/api\/months\/[^/]+\/salary$/.test(pathname)) return ["PATCH"];
   if (/^\/api\/months\/[^/]+\/(initialize-entries|close|reopen)$/.test(pathname)) return ["POST"];
+  if (/^\/api\/months\/[^/]+\/entries$/.test(pathname)) return ["DELETE"];
   if (/^\/api\/months\/[^/]+$/.test(pathname)) return ["DELETE"];
   if (/^\/api\/entries\/[^/]+\/observation$/.test(pathname)) return ["PATCH"];
+  if (/^\/api\/entries\/[^/]+\/income-classification$/.test(pathname)) return ["PATCH"];
   if (/^\/api\/entries\/[^/]+$/.test(pathname)) return ["PATCH", "DELETE"];
   if (/^\/api\/templates\/[^/]+\/observation$/.test(pathname)) return ["PATCH"];
   if (/^\/api\/templates\/[^/]+$/.test(pathname)) return ["PATCH", "DELETE"];
+  if (/^\/api\/categories\/[^/]+$/.test(pathname)) return ["PATCH", "DELETE"];
+  if (/^\/api\/bank-imports\/[^/]+\/(confirm|undo)$/.test(pathname)) return ["POST"];
+  if (/^\/api\/bank-imports\/[^/]+$/.test(pathname)) return ["GET"];
   return null;
+}
+
+function decodeHeaderValue(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return "extrato.ofx";
+  }
+}
+
+function parseImportDirections(value) {
+  const directions = String(value || "expense,income").split(",").map((item) => item.trim()).filter(Boolean);
+  const uniqueDirections = [...new Set(directions)];
+  if (!uniqueDirections.length || uniqueDirections.some((item) => !["expense", "income"].includes(item))) {
+    throw httpError(400, "Selecione gastos, receitas ou ambos para importar.", "invalid_import_directions");
+  }
+  return uniqueDirections;
+}
+
+function normalizeDeletionDirections(value) {
+  if (!Array.isArray(value)) {
+    throw httpError(400, "Selecione os tipos de lancamento que deseja excluir.", "invalid_directions");
+  }
+  const directions = [...new Set(value.map((item) => String(item || "").trim()))];
+  if (!directions.length || directions.length > 2 || directions.some((item) => !["expense", "income"].includes(item))) {
+    throw httpError(400, "Selecione gastos, receitas ou ambos para excluir.", "invalid_directions");
+  }
+  return directions;
 }
 
 function matchUuidPath(pathname, expression) {
