@@ -29,7 +29,8 @@ const mutationBusy = ref(false);
 const mutationError = ref("");
 const notice = ref("");
 
-const templates = computed(() => payload.value?.templates || []);
+const templates = computed(() => (payload.value?.templates || [])
+  .filter((item) => item.startMonth === selectedMonth.value));
 const isClosed = computed(() => Boolean(payload.value?.month?.isClosed));
 const fixedCount = computed(() => templates.value.filter((item) => !item.isVariable).length);
 const variableCount = computed(() => templates.value.length - fixedCount.value);
