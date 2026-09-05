@@ -524,6 +524,95 @@ test("importacao OFX permite escolher somente gastos ou receitas", async () => {
   assert.equal(response.payload.import.incomeTotal, 0);
 });
 
+test("importacao OFX preserva lancamentos manuais e nao repete conciliacoes sugeridas", async () => {
+  const bankUser = await register("usuario-ofx-manual", "usuario-ofx-manual@example.com");
+  await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-08", salary: 4200, includeFixedEntries: false },
+    session: bankUser,
+  });
+
+  const academy = await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Academia",
+      amount: 100,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Pix",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: bankUser,
+  });
+  const academyEntry = academy.payload.month.entries.find((entry) => entry.name === "Academia");
+
+  await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Internet",
+      amount: 80,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Boleto",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: bankUser,
+  });
+
+  const ofx = buildBankOfx([
+    { type: "DEBIT", date: "20260805", amount: "-100.00", fitId: "manual-match-1", name: "Academia" },
+    { type: "DEBIT", date: "20260806", amount: "-100.00", fitId: "manual-match-2", name: "Academia mensalidade" },
+    { type: "DEBIT", date: "20260807", amount: "-80.00", fitId: "manual-unrelated", name: "Farmacia" },
+    { type: "DEBIT", date: "20260808", amount: "-12.00", fitId: "manual-unselected", name: "Padaria" },
+  ]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "expense" },
+    session: bankUser,
+  });
+  assert.equal(preview.status, 201);
+  assert.equal(preview.payload.import.items.filter((item) => item.suggestedEntryId === academyEntry.id).length, 1);
+  assert.equal(preview.payload.import.items.find((item) => item.externalId === "manual-unrelated").suggestedEntryId, null);
+
+  const decisions = preview.payload.import.items.map((item) => ({
+    itemId: item.id,
+    action: item.externalId === "manual-unselected" ? "ignore" : item.suggestedEntryId ? "match" : "create",
+    entryId: item.suggestedEntryId || undefined,
+    description: item.description,
+    cycle: item.suggestedCycle,
+    paymentMethod: item.paymentMethod,
+    categoryId: item.suggestedCategoryId,
+  }));
+  const confirmed = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: { decisions },
+    session: bankUser,
+  });
+  assert.equal(confirmed.status, 200);
+
+  const month = await request("/api/bootstrap?month=2026-08", { session: bankUser });
+  assert.equal(month.payload.month.entries.filter((entry) => entry.name.toLowerCase().includes("academia")).length, 2);
+  assert.ok(month.payload.month.entries.some((entry) => entry.name === "Internet" && entry.sourceType === "fixed"));
+  assert.ok(month.payload.month.entries.some((entry) => entry.name === "Farmacia" && entry.sourceType === "ofx"));
+  assert.equal(month.payload.month.entries.some((entry) => entry.name === "Padaria"), false);
+
+  const nextPreview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "expense" },
+    session: bankUser,
+  });
+  assert.equal(nextPreview.payload.import.items.find((item) => item.externalId === "manual-unselected").duplicate, false);
+  assert.equal(nextPreview.payload.import.items.find((item) => item.externalId === "manual-unrelated").duplicate, true);
+});
+
 test("salarios selecionados no OFX preenchem o salario de um mes novo", async () => {
   const salaryUser = await register("usuario-salario-ofx", "usuario-salario-ofx@example.com");
   const ofx = buildBankOfx([

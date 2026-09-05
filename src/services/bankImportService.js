@@ -49,6 +49,7 @@ async function previewBankImport(userId, buffer, filename, directions = ["expens
   const activeKeys = findActiveDedupeKeys(userId, selectedTransactions.map((item) => item.dedupeKey));
   const seenInFile = new Set();
   const candidateCache = new Map();
+  const reservedEntryIds = new Set();
 
   const items = selectedTransactions.map((item) => {
     const month = getMonthRecord(userId, item.monthKey);
@@ -63,7 +64,10 @@ async function previewBankImport(userId, buffer, filename, directions = ["expens
       if (!candidateCache.has(item.monthKey)) {
         candidateCache.set(item.monthKey, listPendingExpenseEntries(userId, item.monthKey));
       }
-      suggestedEntryId = suggestEntry(item, candidateCache.get(item.monthKey))?.id || null;
+      const availableCandidates = candidateCache.get(item.monthKey)
+        .filter((candidate) => !reservedEntryIds.has(candidate.id));
+      suggestedEntryId = suggestEntry(item, availableCandidates)?.id || null;
+      if (suggestedEntryId) reservedEntryIds.add(suggestedEntryId);
     }
     const category = categorizeTransaction(userId, item);
     return {
@@ -126,7 +130,7 @@ function confirmBankImport(userId, batchId, decisions) {
       let linkedEntryId = null;
       let previousEntryJson = "";
       let appliedEntryUpdatedAt = "";
-      let committedAt = now;
+      let committedAt = decision.action === "ignore" ? "" : now;
 
       if (decision.action !== "ignore") {
         if (!getMonthRecord(userId, item.month_key)) {
@@ -169,8 +173,6 @@ function confirmBankImport(userId, batchId, decisions) {
           createdAt: now,
         });
         appliedEntryUpdatedAt = now;
-      } else if (item.duplicate) {
-        committedAt = "";
       }
 
       completeBankImportItem(userId, item.id, {
@@ -296,7 +298,9 @@ function suggestEntry(item, candidates) {
   for (const candidate of candidates) {
     const amountDifference = Math.abs(Number(candidate.amount_cents) - item.amountCents);
     const amountScore = amountDifference === 0 ? 60 : amountDifference <= Math.max(100, item.amountCents * 0.05) ? 38 : 0;
-    const textScore = Math.round(tokenSimilarity(item.description, candidate.name) * 40);
+    const similarity = tokenSimilarity(item.description, candidate.name);
+    if (similarity < 0.25) continue;
+    const textScore = Math.round(similarity * 40);
     const score = amountScore + textScore;
     if (score >= 50 && (!best || score > best.score)) best = { ...candidate, score };
   }

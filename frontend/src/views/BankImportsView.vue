@@ -33,7 +33,10 @@ const loadingDetails = ref(false);
 const error = ref("");
 const notice = ref("");
 
-const selectedRows = computed(() => rows.value.filter((item) => item.action !== "ignore" && !item.blockedReason && !item.duplicate));
+const importableRows = computed(() => rows.value.filter((item) => !item.blockedReason && !item.duplicate));
+const selectedRows = computed(() => importableRows.value.filter((item) => item.selected && item.action !== "ignore"));
+const allImportableSelected = computed(() => importableRows.value.length > 0 && selectedRows.value.length === importableRows.value.length);
+const someImportableSelected = computed(() => selectedRows.value.length > 0 && !allImportableSelected.value);
 const selectedExpenses = computed(() => selectedRows.value.filter((item) => item.direction === "expense").reduce((total, item) => total + Number(item.amount || 0), 0));
 const selectedIncome = computed(() => selectedRows.value.filter((item) => item.direction === "income").reduce((total, item) => total + Number(item.amount || 0), 0));
 const blockedCount = computed(() => rows.value.filter((item) => item.blockedReason).length);
@@ -41,6 +44,7 @@ const duplicateCount = computed(() => rows.value.filter((item) => item.duplicate
 const salaryCandidates = computed(() => rows.value.filter((item) => item.direction === "income" && !item.blockedReason && !item.duplicate));
 
 const columns = computed(() => [
+  { title: "Importar", field: "selected", width: 82, minWidth: 82, hozAlign: "center", headerHozAlign: "center", headerSort: false, clipboard: false, formatter: selectionFormatter },
   { title: "Data", field: "postedDate", width: 108, formatter: (cell) => formatDate(cell.getValue()), headerValueFilter: true },
   { title: "Descrição", field: "description", minWidth: 220, widthGrow: 2, editor: "input", editable: editableRow, headerValueFilter: true },
   { title: "Valor", field: "amount", width: 125, hozAlign: "right", formatter: (cell) => formatCurrency(cell.getValue()) },
@@ -53,7 +57,7 @@ const columns = computed(() => [
     headerValueFilter: { formatter: categoryName },
   },
   {
-    title: "Decisão", field: "action", width: 190, editor: "list", editable: (cell) => !isLocked(cell.getRow().getData()),
+    title: "Decisão", field: "action", width: 190, editor: "list", editable: actionableRow,
     editorParams: (cell) => ({ values: actionOptions(cell.getRow().getData()) }),
     formatter: (cell) => actionLabel(cell.getValue(), cell.getRow().getData()),
     headerValueFilter: { formatter: (value) => actionLabel(value) },
@@ -79,7 +83,7 @@ const gridOptions = {
 };
 
 function editableRow(cell) { return !isLocked(cell.getRow().getData()); }
-function actionableRow(cell) { return !isLocked(cell.getRow().getData()) && cell.getRow().getData().action !== "ignore"; }
+function actionableRow(cell) { return !isLocked(cell.getRow().getData()) && cell.getRow().getData().selected && cell.getRow().getData().action !== "ignore"; }
 function isLocked(row) { return Boolean(row.blockedReason || row.duplicate); }
 function directionLabel(value) { return value === "income" ? "Receita" : "Gasto"; }
 function blockedLabel(value) { return value === "month_closed" ? "Mês fechado" : value === "unsupported_currency" ? "Moeda não suportada" : "Bloqueado"; }
@@ -87,10 +91,22 @@ function actionLabel(value, row = {}) {
   return ({ create: "Criar novo gasto", match: row.suggestedEntryName ? `Conciliar: ${row.suggestedEntryName}` : "Conciliar lançamento", income: "Receita extra", salary: "Vincular ao salário", ignore: "Ignorar" }[value] || value);
 }
 function actionOptions(row) {
-  if (row.direction === "income") return { income: "Receita extra", salary: "Vincular ao salário", ignore: "Ignorar" };
+  if (row.direction === "income") return { income: "Receita extra", salary: "Vincular ao salário" };
   return row.suggestedEntryId
-    ? { match: `Conciliar com ${row.suggestedEntryName}`, create: "Criar novo gasto", ignore: "Ignorar" }
-    : { create: "Criar novo gasto", ignore: "Ignorar" };
+    ? { match: `Conciliar com ${row.suggestedEntryName}`, create: "Criar novo gasto" }
+    : { create: "Criar novo gasto" };
+}
+function selectionFormatter(cell) {
+  const row = cell.getRow().getData();
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.className = "import-row-checkbox";
+  input.checked = Boolean(row.selected);
+  input.disabled = isLocked(row);
+  input.setAttribute("aria-label", `Importar ${row.description}`);
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("change", (event) => cell.setValue(event.currentTarget.checked, true));
+  return input;
 }
 function tag(label, tone) {
   const element = document.createElement("span");
@@ -101,7 +117,8 @@ function tag(label, tone) {
 function statusTag(row) {
   if (row.duplicate) return tag("Duplicado", "duplicate");
   if (row.blockedReason) return tag(blockedLabel(row.blockedReason), "blocked");
-  return tag(row.action === "ignore" ? "Ignorado" : "Pronto", row.action === "ignore" ? "ignored" : "ready");
+  const ignored = !row.selected || row.action === "ignore";
+  return tag(ignored ? "Não selecionado" : "Pronto", ignored ? "ignored" : "ready");
 }
 function categoryOptions(direction) {
   return Object.fromEntries(categories.value
@@ -134,9 +151,17 @@ function formatDateTime(value) {
 
 function updateRow(nextRow, field, oldValue) {
   const changedCategory = field === "categoryId" && nextRow.categoryId !== oldValue;
+  const selected = field === "action" ? nextRow.action !== "ignore" : Boolean(nextRow.selected);
   rows.value = rows.value.map((item) => item.id === nextRow.id
-    ? { ...nextRow, rememberCategory: changedCategory || nextRow.rememberCategory, reviewStatus: reviewStatus(nextRow) }
+    ? { ...nextRow, selected, rememberCategory: changedCategory || nextRow.rememberCategory, reviewStatus: reviewStatus({ ...nextRow, selected }) }
     : item);
+}
+
+function toggleAllImportable(event) {
+  const selected = event.target.checked;
+  rows.value = rows.value.map((row) => isLocked(row)
+    ? row
+    : { ...row, selected, reviewStatus: reviewStatus({ ...row, selected }) });
 }
 
 function selectFile(file) {
@@ -162,7 +187,7 @@ async function uploadSelectedFile() {
     const payload = await previewOfx(file, directions);
     preview.value = payload.import;
     rows.value = payload.import.items.map((item) => {
-      const draft = { ...item, action: item.defaultAction, cycle: item.suggestedCycle, categoryId: item.suggestedCategoryId, rememberCategory: false };
+      const draft = { ...item, selected: !item.blockedReason && !item.duplicate, action: item.defaultAction, cycle: item.suggestedCycle, categoryId: item.suggestedCategoryId, rememberCategory: false };
       return { ...draft, reviewStatus: reviewStatus(draft) };
     });
     salaryDialogOpen.value = importDirections.income && salaryCandidates.value.length > 0;
@@ -182,7 +207,7 @@ function cancelDirectionSelection() {
 function reviewStatus(item) {
   if (item.duplicate) return "Duplicado";
   if (item.blockedReason) return blockedLabel(item.blockedReason);
-  return item.action === "ignore" ? "Ignorado" : "Pronto";
+  return !item.selected || item.action === "ignore" ? "Não selecionado" : "Pronto";
 }
 
 function onDrop(event) {
@@ -204,8 +229,8 @@ async function confirmImport() {
   try {
     const decisions = rows.value.map((item) => ({
       itemId: item.id,
-      action: item.action,
-      entryId: item.action === "match" ? item.suggestedEntryId : undefined,
+      action: item.selected && !isLocked(item) ? item.action : "ignore",
+      entryId: item.selected && item.action === "match" ? item.suggestedEntryId : undefined,
       description: item.description,
       cycle: item.cycle,
       paymentMethod: item.paymentMethod,
@@ -346,6 +371,10 @@ onMounted(() => Promise.all([loadHistory(), loadCategories()]));
 
             <section v-if="preview.status === 'draft'" class="workspace-panel import-review-panel">
               <div class="workspace-panel__heading"><div><h2>Confira antes de importar</h2><p>Edite com duplo clique. Ao corrigir uma categoria, o Dindin aprende para as próximas importações.</p></div><div class="import-review-badges"><span v-if="duplicateCount">{{ duplicateCount }} duplicado(s)</span><span v-if="blockedCount">{{ blockedCount }} bloqueado(s)</span></div></div>
+              <div class="import-selection-toolbar">
+                <label><input type="checkbox" :checked="allImportableSelected" :indeterminate="someImportableSelected" :disabled="!importableRows.length" @change="toggleAllImportable" /><span>Selecionar todas as movimentações disponíveis</span></label>
+                <small>{{ selectedRows.length }} de {{ importableRows.length }} selecionada(s)</small>
+              </div>
               <DataGrid :rows="rows" :columns="columns" :options="gridOptions" :refresh-key="preview.id" @cell-edited="updateRow" />
             </section>
 
