@@ -120,6 +120,7 @@ function findActiveDedupeKeys(userId, keys) {
       SELECT dedupe_key FROM bank_import_items
       WHERE user_id = ? AND dedupe_key IN (${placeholders})
         AND committed_at <> '' AND undone_at = ''
+        AND decision IN ('create', 'match', 'income', 'salary')
     `).all(userId, ...part);
     rows.forEach((row) => found.add(row.dedupe_key));
   }

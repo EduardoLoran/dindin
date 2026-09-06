@@ -602,6 +602,13 @@ test("importacao OFX preserva lancamentos manuais e nao repete conciliacoes suge
   assert.ok(month.payload.month.entries.some((entry) => entry.name === "Farmacia" && entry.sourceType === "ofx"));
   assert.equal(month.payload.month.entries.some((entry) => entry.name === "Padaria"), false);
 
+  // Versões antigas gravavam a data de confirmação até para itens ignorados.
+  const legacyDatabase = new DatabaseSync(databaseFile);
+  const ignoredItem = preview.payload.import.items.find((item) => item.externalId === "manual-unselected");
+  legacyDatabase.prepare("UPDATE bank_import_items SET committed_at = ? WHERE id = ?")
+    .run(new Date().toISOString(), ignoredItem.id);
+  legacyDatabase.close();
+
   const nextPreview = await request("/api/bank-imports/ofx/preview", {
     method: "POST",
     rawBody: Buffer.from(ofx, "latin1"),

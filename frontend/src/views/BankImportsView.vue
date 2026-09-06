@@ -104,8 +104,9 @@ function selectionFormatter(cell) {
   input.checked = Boolean(row.selected);
   input.disabled = isLocked(row);
   input.setAttribute("aria-label", `Importar ${row.description}`);
+  if (input.disabled) input.title = row.duplicate ? "Movimentação já importada" : blockedLabel(row.blockedReason);
   input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("change", (event) => cell.setValue(event.currentTarget.checked, true));
+  input.addEventListener("change", (event) => setRowSelected(row.id, event.currentTarget.checked));
   return input;
 }
 function tag(label, tone) {
@@ -155,6 +156,14 @@ function updateRow(nextRow, field, oldValue) {
   rows.value = rows.value.map((item) => item.id === nextRow.id
     ? { ...nextRow, selected, rememberCategory: changedCategory || nextRow.rememberCategory, reviewStatus: reviewStatus({ ...nextRow, selected }) }
     : item);
+}
+
+function setRowSelected(rowId, selected) {
+  rows.value = rows.value.map((row) => {
+    if (row.id !== rowId || isLocked(row)) return row;
+    const updated = { ...row, selected };
+    return { ...updated, reviewStatus: reviewStatus(updated) };
+  });
 }
 
 function toggleAllImportable(event) {
