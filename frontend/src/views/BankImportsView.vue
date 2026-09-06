@@ -41,6 +41,7 @@ const selectedExpenses = computed(() => selectedRows.value.filter((item) => item
 const selectedIncome = computed(() => selectedRows.value.filter((item) => item.direction === "income").reduce((total, item) => total + Number(item.amount || 0), 0));
 const blockedCount = computed(() => rows.value.filter((item) => item.blockedReason).length);
 const duplicateCount = computed(() => rows.value.filter((item) => item.duplicate).length);
+const noSelectableRows = computed(() => rows.value.length > 0 && importableRows.value.length === 0);
 const salaryCandidates = computed(() => rows.value.filter((item) => item.direction === "income" && !item.blockedReason && !item.duplicate));
 
 const columns = computed(() => [
@@ -98,16 +99,22 @@ function actionOptions(row) {
 }
 function selectionFormatter(cell) {
   const row = cell.getRow().getData();
-  const input = document.createElement("input");
-  input.type = "checkbox";
-  input.className = "import-row-checkbox";
-  input.checked = Boolean(row.selected);
-  input.disabled = isLocked(row);
-  input.setAttribute("aria-label", `Importar ${row.description}`);
-  if (input.disabled) input.title = row.duplicate ? "Movimentação já importada" : blockedLabel(row.blockedReason);
-  input.addEventListener("click", (event) => event.stopPropagation());
-  input.addEventListener("change", (event) => setRowSelected(row.id, event.currentTarget.checked));
-  return input;
+  const selected = Boolean(row.selected);
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `import-row-selector${selected ? " is-selected" : ""}`;
+  button.disabled = isLocked(row);
+  button.setAttribute("aria-pressed", String(selected));
+  button.setAttribute("aria-label", `${selected ? "Não importar" : "Importar"} ${row.description}`);
+  button.textContent = selected ? "✓" : "";
+  if (button.disabled) button.title = row.duplicate ? "Movimentação já importada" : blockedLabel(row.blockedReason);
+  button.addEventListener("pointerdown", (event) => event.stopPropagation());
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setRowSelected(row.id, !selected);
+  });
+  return button;
 }
 function tag(label, tone) {
   const element = document.createElement("span");
@@ -274,6 +281,10 @@ function startNewImport() {
   notice.value = "";
 }
 
+function showImportHistory() {
+  tabIndex.value = 1;
+}
+
 async function loadHistory(page = 1) {
   loadingHistory.value = true;
   try {
@@ -384,6 +395,11 @@ onMounted(() => Promise.all([loadHistory(), loadCategories()]));
                 <label><input type="checkbox" :checked="allImportableSelected" :indeterminate="someImportableSelected" :disabled="!importableRows.length" @change="toggleAllImportable" /><span>Selecionar todas as movimentações disponíveis</span></label>
                 <small>{{ selectedRows.length }} de {{ importableRows.length }} selecionada(s)</small>
               </div>
+              <div v-if="noSelectableRows" class="import-selection-warning" role="status">
+                <AppIcon name="alert" :size="19" />
+                <div><strong>Nenhuma movimentação disponível para selecionar.</strong><p v-if="duplicateCount">Este arquivo já possui {{ duplicateCount }} movimentação(ões) importada(s). Para importar novamente, desfaça o lote anterior no histórico.</p><p v-else>As movimentações estão bloqueadas pelo período ou pelo formato do arquivo.</p></div>
+                <button v-if="duplicateCount" type="button" @click="showImportHistory">Abrir histórico</button>
+              </div>
               <DataGrid :rows="rows" :columns="columns" :options="gridOptions" :refresh-key="preview.id" @cell-edited="updateRow" />
             </section>
 
@@ -444,8 +460,8 @@ onMounted(() => Promise.all([loadHistory(), loadCategories()]));
               <DialogTitle>O que deseja importar?</DialogTitle>
               <p>Escolha quais movimentações do arquivo OFX devem entrar na conferência.</p>
               <div class="import-direction-options">
-                <label :class="{ 'is-selected': importDirections.expense }"><input v-model="importDirections.expense" type="checkbox" /><span><AppIcon name="receipt" /><strong>Gastos</strong><small>Compras, pagamentos e débitos</small></span></label>
-                <label :class="{ 'is-selected': importDirections.income }"><input v-model="importDirections.income" type="checkbox" /><span><AppIcon name="income" /><strong>Receitas</strong><small>Créditos e valores recebidos</small></span></label>
+                <button type="button" :class="{ 'is-selected': importDirections.expense }" :aria-pressed="importDirections.expense" @click="importDirections.expense = !importDirections.expense"><AppIcon name="receipt" /><strong>Gastos</strong><small>Compras, pagamentos e débitos</small></button>
+                <button type="button" :class="{ 'is-selected': importDirections.income }" :aria-pressed="importDirections.income" @click="importDirections.income = !importDirections.income"><AppIcon name="income" /><strong>Receitas</strong><small>Créditos e valores recebidos</small></button>
               </div>
               <p v-if="!importDirections.expense && !importDirections.income" class="workspace-error" role="alert">Selecione pelo menos uma opção.</p>
               <div class="dialog-actions"><button class="dialog-cancel" type="button" @click="cancelDirectionSelection">Cancelar</button><button class="workspace-primary" type="button" :disabled="!importDirections.expense && !importDirections.income" @click="uploadSelectedFile">Continuar</button></div>
