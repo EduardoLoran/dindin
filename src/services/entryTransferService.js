@@ -2,7 +2,7 @@ const { runInTransaction } = require("../db/schema");
 const { httpError } = require("../lib/errors");
 const { fromCents } = require("../lib/values");
 const { insertAuditEvent } = require("../repositories/auditRepository");
-const { deleteEntry, listEntries, movePendingEntryToMonth } = require("../repositories/entryRepository");
+const { deleteEntry, listEntries, moveEntryToMonth } = require("../repositories/entryRepository");
 const { getMonthRecord } = require("../repositories/monthRepository");
 const { moveTemplateStartMonthIfMatches } = require("../repositories/templateRepository");
 const { assertMonthOpen, ensureMonthExists } = require("./monthService");
@@ -75,7 +75,7 @@ function transferPendingEntries(userId, payload) {
         const deleted = deleteEntry(userId, item.conflict.targetEntryId);
         if (deleted.changes !== 1) throw httpError(409, "O conflito no mes de destino foi alterado. Revise novamente.", "transfer_conflict_changed");
       }
-      const moved = movePendingEntryToMonth(userId, item.id, payload.sourceMonth, payload.targetMonth, updatedAt);
+      const moved = moveEntryToMonth(userId, item.id, payload.sourceMonth, payload.targetMonth, updatedAt);
       if (moved.changes !== 1) throw httpError(409, "Um lancamento foi alterado durante a transferencia.", "transfer_selection_changed");
 
       if (payload.adjustTemplateStart && item.adjustableTemplateStart && item.templateId) {
@@ -112,8 +112,11 @@ function transferPendingEntries(userId, payload) {
 
 function isTransferable(entry) {
   return entry.direction === "expense"
-    && entry.status === "pending"
     && TRANSFERABLE_SOURCES.has(entry.source_type);
+}
+
+function canReplaceConflict(entry) {
+  return isTransferable(entry) && entry.status === "pending";
 }
 
 function serializeTransferItem(entry, targetEntry) {
@@ -122,7 +125,7 @@ function serializeTransferItem(entry, targetEntry) {
     name: targetEntry.name,
     status: targetEntry.status,
     sourceType: targetEntry.source_type,
-    canReplace: isTransferable(targetEntry),
+    canReplace: canReplaceConflict(targetEntry),
   } : null;
   return {
     id: entry.id,

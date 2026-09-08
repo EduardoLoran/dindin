@@ -35,7 +35,7 @@ const visibleExpenses = computed(() => visibleRows.value.filter((entry) => entry
 const visibleIncome = computed(() => visibleRows.value.filter((entry) => entry.direction === "income").reduce((total, entry) => total + Number(entry.amount || 0), 0));
 const expenseCount = computed(() => rows.value.filter((entry) => entry.direction !== "income").length);
 const incomeCount = computed(() => rows.value.filter((entry) => entry.direction === "income").length);
-const transferableCount = computed(() => rows.value.filter((entry) => entry.direction === "expense" && entry.status === "pending" && ["manual", "fixed"].includes(entry.sourceType)).length);
+const transferableCount = computed(() => rows.value.filter((entry) => entry.direction === "expense" && ["manual", "fixed"].includes(entry.sourceType)).length);
 
 const columns = computed(() => [
   { title: "Ações", field: "actions", width: isClosed.value ? 78 : 112, minWidth: isClosed.value ? 78 : 112, maxWidth: isClosed.value ? 78 : 112, cssClass: "entries-actions-cell", headerHozAlign: "center", clipboard: false, headerSort: false, formatter: actionsFormatter, cellClick: handleActionClick },
@@ -347,7 +347,7 @@ listenPeriodChanges((nextPayload) => { if (nextPayload) initialize(nextPayload);
         <div class="workspace-panel__heading">
           <div><h2>Lançamentos do mês</h2><p>{{ isClosed ? "Mês fechado para consulta." : "Lançamentos consolidados do período selecionado." }}</p></div>
           <div class="entries-heading-actions">
-            <button class="workspace-secondary" type="button" :disabled="saving || isClosed || transferableCount === 0" @click="openTransfer"><AppIcon name="arrow-right" :size="16" />Transferir pendências <span v-if="transferableCount">{{ transferableCount }}</span></button>
+            <button class="workspace-secondary" type="button" :disabled="saving || isClosed || transferableCount === 0" @click="openTransfer"><AppIcon name="arrow-right" :size="16" />Transferir lançamentos <span v-if="transferableCount">{{ transferableCount }}</span></button>
             <button class="workspace-danger" type="button" :disabled="saving || isClosed || rows.length === 0" @click="deleteAllOpen = true"><AppIcon name="trash" :size="16" />Excluir lançamentos</button>
           </div>
         </div>

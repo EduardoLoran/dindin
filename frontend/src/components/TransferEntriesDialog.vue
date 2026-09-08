@@ -117,8 +117,8 @@ function addMonth(monthKey, offset) {
         <TransitionChild as="template" enter="dialog-transition" enter-from="dialog-hidden" enter-to="dialog-visible" leave="dialog-transition" leave-from="dialog-visible" leave-to="dialog-hidden">
           <DialogPanel class="dialog-panel transfer-entries-dialog">
             <div class="dialog-heading"><div class="dialog-panel__icon"><AppIcon name="arrow-right" :size="22" /></div><button type="button" aria-label="Fechar" :disabled="busy" @click="close"><AppIcon name="close" /></button></div>
-            <DialogTitle>Transferir pendências</DialogTitle>
-            <p>Mova os gastos pendentes cadastrados no mês incorreto antes de conciliá-los com o OFX.</p>
+            <DialogTitle>Transferir lançamentos</DialogTitle>
+            <p>Mova gastos manuais ou fixos cadastrados no mês incorreto. Lançamentos do OFX permanecem protegidos.</p>
 
             <div class="transfer-periods">
               <div class="transfer-period-card"><span><AppIcon name="calendar" :size="18" /></span><div><small>Mês de origem</small><strong>{{ formatMonth(sourceMonth) }}</strong></div></div>
@@ -140,7 +140,7 @@ function addMonth(monthKey, offset) {
                   </button>
                 </div>
               </div>
-              <div v-else class="transfer-empty"><AppIcon name="check" :size="25" /><strong>Nenhuma pendência disponível.</strong><p>Somente gastos manuais ou fixos com status pendente podem ser transferidos.</p></div>
+              <div v-else class="transfer-empty"><AppIcon name="check" :size="25" /><strong>Nenhum lançamento disponível.</strong><p>Somente gastos manuais ou fixos podem ser transferidos. Lançamentos do OFX não são movidos.</p></div>
 
               <section v-if="selectedConflicts.length" class="transfer-conflicts">
                 <div><AppIcon name="alert" :size="18" /><span><strong>{{ selectedConflicts.length }} conflito(s) no destino.</strong><small>Escolha como tratar gastos fixos que já existem em {{ formatMonth(targetMonth) }}.</small></span></div>

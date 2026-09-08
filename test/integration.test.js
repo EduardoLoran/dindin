@@ -308,6 +308,13 @@ test("transferencia pode ser refeita e ajusta os gastos fixos nos dois sentidos"
   });
   const variableEntry = variable.payload.month.entries.find((entry) => entry.name === "Compra eventual para transferir");
 
+  const paidVariable = await request(`/api/entries/${variableEntry.id}`, {
+    method: "PATCH",
+    body: { amount: variableEntry.amount, status: "paid", cycle: variableEntry.cycle },
+    session: transferUser,
+  });
+  assert.equal(paidVariable.status, 200);
+
   const preview = await request("/api/entries/transfer/preview", {
     method: "POST",
     body: { sourceMonth: "2026-08", targetMonth: "2026-09" },
@@ -365,7 +372,7 @@ test("transferencia pode ser refeita e ajusta os gastos fixos nos dois sentidos"
   assert.equal(returned.payload.activeMonth, "2026-08");
   assert.equal(returned.payload.transfer.movedCount, 2);
   assert.ok(returned.payload.month.entries.some((entry) => entry.id === fixedEntry.id));
-  assert.ok(returned.payload.month.entries.some((entry) => entry.id === variableEntry.id));
+  assert.equal(returned.payload.month.entries.find((entry) => entry.id === variableEntry.id).status, "paid");
 
   const repeatedSource = await request("/api/bootstrap?month=2026-09", { session: transferUser });
   assert.equal(repeatedSource.payload.month.entries.some((entry) => [fixedEntry.id, variableEntry.id].includes(entry.id)), false);

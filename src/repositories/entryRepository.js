@@ -270,13 +270,12 @@ function deleteEntry(userId, entryId) {
   return db.prepare("DELETE FROM entries WHERE id = ? AND user_id = ?").run(entryId, userId);
 }
 
-function movePendingEntryToMonth(userId, entryId, sourceMonth, targetMonth, updatedAt) {
+function moveEntryToMonth(userId, entryId, sourceMonth, targetMonth, updatedAt) {
   return db.prepare(`
     UPDATE entries
     SET month_key = ?, updated_at = ?
     WHERE id = ? AND user_id = ? AND month_key = ?
-      AND direction = 'expense' AND status = 'pending'
-      AND source_type IN ('manual', 'fixed')
+      AND direction = 'expense' AND source_type IN ('manual', 'fixed')
   `).run(targetMonth, updatedAt, entryId, userId, sourceMonth);
 }
 
@@ -335,7 +334,7 @@ module.exports = {
   updateEntriesBulk,
   updateEntryFromTemplate,
   deleteEntry,
-  movePendingEntryToMonth,
+  moveEntryToMonth,
   updateIncomeClassification,
   deleteEntriesByMonthAndDirections,
   deleteEntriesByIds,
