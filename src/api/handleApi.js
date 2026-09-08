@@ -29,6 +29,7 @@ const {
   deleteEntriesByMonthAndDirections,
   deleteEntriesByTemplateAndMonth,
   findEntryMonthById,
+  listEntryIdsByMonthAndDirections,
   listOwnedEntryIdsInMonth,
   updateEntriesBulk,
   updateEntry,
@@ -36,7 +37,12 @@ const {
   updateEntryObservation,
 } = require("../repositories/entryRepository");
 const { getMonthRecord, listMonths, syncImportedSalary, updateMonthSalary } = require("../repositories/monthRepository");
-const { ensureImportSalarySnapshotForEntry, releaseOrphanedImportItems, updateImportDecisionForEntry } = require("../repositories/bankImportRepository");
+const {
+  ensureImportSalarySnapshotForEntry,
+  releaseImportItemsForEntries,
+  releaseOrphanedImportItems,
+  updateImportDecisionForEntry,
+} = require("../repositories/bankImportRepository");
 const {
   createPasswordResetToken,
   deleteActivePasswordResetTokens,
@@ -579,9 +585,11 @@ async function handleAuthenticatedApi(request, response, url, session) {
     const row = requireOwnedEntry(user.id, entryMatch);
     assertMonthOpen(user.id, row.month_key);
     runInTransaction(() => {
+      const now = new Date().toISOString();
+      releaseImportItemsForEntries(user.id, [entryMatch], now);
       deleteEntry(user.id, entryMatch);
       if (row.direction === "income") syncImportedSalary(user.id, row.month_key);
-      releaseOrphanedImportItems(user.id, new Date().toISOString());
+      releaseOrphanedImportItems(user.id, now);
     });
     sendJson(response, 200, buildBootstrapPayload(user, row.month_key));
     return;
@@ -594,9 +602,12 @@ async function handleAuthenticatedApi(request, response, url, session) {
     const directions = normalizeDeletionDirections(body.directions);
     assertMonthOpen(user.id, deleteMonthEntriesMatch);
     runInTransaction(() => {
+      const now = new Date().toISOString();
+      const entryIds = listEntryIdsByMonthAndDirections(user.id, deleteMonthEntriesMatch, directions);
+      releaseImportItemsForEntries(user.id, entryIds, now);
       const result = deleteEntriesByMonthAndDirections(user.id, deleteMonthEntriesMatch, directions);
       if (directions.includes("income")) syncImportedSalary(user.id, deleteMonthEntriesMatch);
-      releaseOrphanedImportItems(user.id, new Date().toISOString());
+      releaseOrphanedImportItems(user.id, now);
       insertAuditEvent({
         userId: user.id,
         eventType: "month_entries_deleted",

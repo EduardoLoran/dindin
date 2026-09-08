@@ -117,14 +117,35 @@ function findActiveDedupeKeys(userId, keys) {
     if (!part.length) continue;
     const placeholders = part.map(() => "?").join(",");
     const rows = db.prepare(`
-      SELECT dedupe_key FROM bank_import_items
-      WHERE user_id = ? AND dedupe_key IN (${placeholders})
-        AND committed_at <> '' AND undone_at = ''
-        AND decision IN ('create', 'match', 'income', 'salary')
+      SELECT items.dedupe_key
+      FROM bank_import_items AS items
+      JOIN entries ON entries.id = items.linked_entry_id AND entries.user_id = items.user_id
+      WHERE items.user_id = ? AND items.dedupe_key IN (${placeholders})
+        AND items.committed_at <> '' AND items.undone_at = ''
+        AND items.decision IN ('create', 'match', 'income', 'salary')
     `).all(userId, ...part);
     rows.forEach((row) => found.add(row.dedupe_key));
   }
   return found;
+}
+
+function releaseImportItemsForEntries(userId, entryIds, now) {
+  let changes = 0;
+  for (let index = 0; index < entryIds.length; index += 500) {
+    const part = entryIds.slice(index, index + 500);
+    if (!part.length) continue;
+    const placeholders = part.map(() => "?").join(",");
+    const result = db.prepare(`
+      UPDATE bank_import_items
+      SET undone_at = ?
+      WHERE user_id = ? AND linked_entry_id IN (${placeholders})
+        AND committed_at <> '' AND undone_at = ''
+        AND decision IN ('create', 'match', 'income', 'salary')
+    `).run(now, userId, ...part);
+    changes += Number(result.changes || 0);
+  }
+  markFullyReleasedBatches(userId, now);
+  return changes;
 }
 
 function completeBankImportItem(userId, itemId, payload) {
@@ -204,9 +225,22 @@ function releaseOrphanedImportItems(userId, now) {
     UPDATE bank_import_items
     SET undone_at = ?
     WHERE user_id = ? AND committed_at <> '' AND undone_at = ''
-      AND decision IN ('create', 'income', 'salary', 'match') AND linked_entry_id IS NULL
+      AND decision IN ('create', 'income', 'salary', 'match')
+      AND (
+        linked_entry_id IS NULL
+        OR NOT EXISTS (
+          SELECT 1 FROM entries
+          WHERE entries.id = bank_import_items.linked_entry_id
+            AND entries.user_id = bank_import_items.user_id
+        )
+      )
   `).run(now, userId);
 
+  markFullyReleasedBatches(userId, now);
+  return result;
+}
+
+function markFullyReleasedBatches(userId, now) {
   db.prepare(`
     UPDATE bank_import_batches
     SET status = 'undone', undone_at = ?
@@ -221,7 +255,6 @@ function releaseOrphanedImportItems(userId, now) {
           AND committed_at <> '' AND undone_at = ''
       )
   `).run(now, userId);
-  return result;
 }
 
 function markBankImportUndone(userId, batchId, undoneAt) {
@@ -248,5 +281,6 @@ module.exports = {
   getImportedSalaryReceived,
   updateImportDecisionForEntry,
   ensureImportSalarySnapshotForEntry,
+  releaseImportItemsForEntries,
   releaseOrphanedImportItems,
 };

@@ -448,6 +448,78 @@ test("exclusao em massa permite selecionar gastos e receitas do mes", async () =
   assert.equal(reimportPreview.payload.import.items[0].salarySuggested, true);
 });
 
+test("excluir gastos importados libera nova importacao e o salario do mes", async () => {
+  const user = await register("usuario-reimportacao", "usuario-reimportacao@example.com");
+  const ofx = buildBankOfx([
+    { type: "DEBIT", date: "20260905", amount: "-99.90", fitId: "expense-reimport", name: "Compra para reimportar" },
+  ]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: ofx,
+    contentType: "application/x-ofx",
+    headers: { "X-File-Name": encodeURIComponent("gastos-setembro.ofx"), "X-Import-Directions": "expense" },
+    session: user,
+  });
+  const item = preview.payload.import.items[0];
+  const confirmed = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: {
+      decisions: [{
+        itemId: item.id,
+        action: "create",
+        description: item.description,
+        cycle: item.suggestedCycle,
+        paymentMethod: item.paymentMethod,
+        categoryId: item.suggestedCategoryId,
+      }],
+    },
+    session: user,
+  });
+  assert.equal(confirmed.status, 200);
+
+  const importedMonth = await request("/api/bootstrap?month=2026-09", { session: user });
+  assert.equal(importedMonth.payload.month.salaryDefined, false);
+  const salary = await request("/api/months/2026-09/salary", {
+    method: "PATCH", body: { salary: 4800 }, session: user,
+  });
+  assert.equal(salary.status, 200);
+  assert.equal(salary.payload.month.salaryDefined, true);
+  assert.equal(salary.payload.month.salary, 4800);
+
+  const deleted = await request("/api/months/2026-09/entries", {
+    method: "DELETE", body: { directions: ["expense"] }, session: user,
+  });
+  assert.equal(deleted.status, 200);
+  assert.equal(deleted.payload.month.entries.filter((entry) => entry.direction === "expense").length, 0);
+
+  const reimportPreview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: ofx,
+    contentType: "application/x-ofx",
+    headers: { "X-File-Name": encodeURIComponent("gastos-setembro.ofx"), "X-Import-Directions": "expense" },
+    session: user,
+  });
+  assert.equal(reimportPreview.status, 201);
+  assert.equal(reimportPreview.payload.import.items[0].duplicate, false);
+
+  const nextItem = reimportPreview.payload.import.items[0];
+  const reimported = await request(`/api/bank-imports/${reimportPreview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: {
+      decisions: [{
+        itemId: nextItem.id,
+        action: "create",
+        description: nextItem.description,
+        cycle: nextItem.suggestedCycle,
+        paymentMethod: nextItem.paymentMethod,
+        categoryId: nextItem.suggestedCategoryId,
+      }],
+    },
+    session: user,
+  });
+  assert.equal(reimported.status, 200);
+});
+
 test("importacao OFX concilia, distribui meses, evita duplicidade e pode ser desfeita", async () => {
   const bankUser = await register("usuario-ofx", "usuario-ofx@example.com");
   const month = await request("/api/months", {

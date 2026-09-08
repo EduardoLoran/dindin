@@ -100,6 +100,15 @@ function insertEntryFromTemplate(userId, monthKey, template) {
   );
 }
 
+function listEntryIdsByMonthAndDirections(userId, monthKey, directions) {
+  const placeholders = directions.map(() => "?").join(",");
+  return db.prepare(`
+    SELECT id
+    FROM entries
+    WHERE user_id = ? AND month_key = ? AND direction IN (${placeholders})
+  `).all(userId, monthKey, ...directions).map((row) => row.id);
+}
+
 function listPendingExpenseEntries(userId, monthKey) {
   return db.prepare(`
     SELECT id, name, amount_cents, cycle, payment_method, observation, status, updated_at
@@ -310,6 +319,7 @@ module.exports = {
   listEntries,
   findEntryMonthById,
   listOwnedEntryIdsInMonth,
+  listEntryIdsByMonthAndDirections,
   findEntryByTemplateInMonth,
   listEntryIdsByTemplateInMonth,
   listDuplicateTemplateEntryGroups,

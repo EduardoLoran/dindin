@@ -30,6 +30,8 @@ const summary = computed(() => month.value?.summary || {
 const entries = computed(() => month.value?.entries || []);
 const monthLabel = computed(() => formatMonth(selectedMonth.value || dashboard.value?.activeMonth));
 const suggestedMonth = computed(() => nextAvailableMonth(selectedMonth.value || dashboard.value?.activeMonth));
+const monthExists = computed(() => dashboard.value?.months?.some((item) => item.monthKey === selectedMonth.value));
+const currentSalaryAction = computed(() => month.value?.salaryDefined ? "Editar salário" : "Cadastrar salário");
 const firstName = computed(() => String(user.value?.displayName || user.value?.username || "").trim().split(/\s+/)[0]);
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -199,7 +201,7 @@ onBeforeUnmount(() => window.removeEventListener("dindin-period-change", handleG
 
       <section class="dashboard-grid dashboard-grid--insights">
         <article class="dashboard-panel budget-panel">
-          <div class="panel-heading"><div><p class="dashboard-eyebrow">Planejamento</p><h2>Saúde do orçamento</h2></div><div class="panel-heading__actions"><button class="panel-action" type="button" @click="openSalary('create')"><AppIcon name="plus" :size="16" />Novo salário</button><button class="panel-action" type="button" :disabled="!month?.salaryDefined" @click="openSalary('edit')"><AppIcon name="edit" :size="16" />Editar salário</button></div></div>
+          <div class="panel-heading"><div><p class="dashboard-eyebrow">Planejamento</p><h2>Saúde do orçamento</h2></div><div class="panel-heading__actions"><button class="panel-action" type="button" @click="openSalary('create')"><AppIcon name="plus" :size="16" />Novo salário</button><button class="panel-action" type="button" :disabled="!monthExists" @click="openSalary(month?.salaryDefined ? 'edit' : 'define')"><AppIcon :name="month?.salaryDefined ? 'edit' : 'wallet'" :size="16" />{{ currentSalaryAction }}</button></div></div>
           <div class="budget-panel__content">
             <div class="budget-ring" :style="{ '--budget-progress': `${budgetPercent * 3.6}deg` }"><div><strong>{{ budgetPercent }}%</strong><span>comprometido</span></div></div>
             <div class="budget-metrics">

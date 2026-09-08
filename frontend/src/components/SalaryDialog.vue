@@ -48,8 +48,8 @@ function submit() {
         <TransitionChild as="template" enter="dialog-transition" enter-from="dialog-hidden" enter-to="dialog-visible" leave="dialog-transition" leave-from="dialog-visible" leave-to="dialog-hidden">
           <DialogPanel class="dialog-panel salary-dialog">
             <div class="dialog-panel__icon"><AppIcon name="wallet" :size="24" /></div>
-            <DialogTitle>{{ mode === "create" ? "Novo salário" : "Editar salário" }}</DialogTitle>
-            <p>{{ mode === "create" ? "Crie um período mesmo que ainda não existam lançamentos." : "Atualize a base financeira do período selecionado." }}</p>
+            <DialogTitle>{{ mode === "create" ? "Novo salário" : mode === "define" ? "Cadastrar salário" : "Editar salário" }}</DialogTitle>
+            <p>{{ mode === "create" ? "Crie um período mesmo que ainda não existam lançamentos." : mode === "define" ? "Informe a base financeira do período criado pela importação." : "Atualize a base financeira do período selecionado." }}</p>
 
             <label v-if="mode === 'create'" for="salary-month">Mês de referência</label>
             <MonthPicker v-if="mode === 'create'" v-model="form.monthKey" input-id="salary-month" :disabled="saving" />
@@ -71,7 +71,7 @@ function submit() {
             <p v-if="error" class="dialog-error" role="alert">{{ error }}</p>
             <div class="dialog-actions">
               <button class="dialog-cancel" type="button" :disabled="saving" @click="emit('close')">Cancelar</button>
-              <button v-if="!isClosed" class="dialog-save" type="button" :disabled="saving || !form.monthKey" @click="submit">{{ saving ? "Salvando..." : mode === "create" ? "Criar salário" : "Salvar salário" }}</button>
+              <button v-if="!isClosed" class="dialog-save" type="button" :disabled="saving || !form.monthKey" @click="submit">{{ saving ? "Salvando..." : mode === "create" ? "Criar salário" : mode === "define" ? "Cadastrar salário" : "Salvar salário" }}</button>
             </div>
           </DialogPanel>
         </TransitionChild>
