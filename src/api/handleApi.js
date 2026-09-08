@@ -73,6 +73,7 @@ const {
   undoBankImport,
 } = require("../services/bankImportService");
 const { createCategory, editCategory, getCategories, removeCategory } = require("../services/categoryService");
+const { previewPendingEntryTransfer, transferPendingEntries } = require("../services/entryTransferService");
 const { assertTurnstile, isTurnstileEnabled } = require("../services/turnstileService");
 const { createPasswordResetLink, deliverPasswordResetEmail } = require("../services/emailService");
 const {
@@ -492,6 +493,40 @@ async function handleAuthenticatedApi(request, response, url, session) {
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/entries/transfer/preview") {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["sourceMonth", "targetMonth"]);
+    const sourceMonth = requireMonthKey(body.sourceMonth);
+    const targetMonth = requireMonthKey(body.targetMonth);
+    sendJson(response, 200, { transfer: previewPendingEntryTransfer(user.id, sourceMonth, targetMonth) });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/entries/transfer") {
+    const body = await readJson(request);
+    assertAllowedFields(body, ["sourceMonth", "targetMonth", "entryIds", "conflictPolicy", "adjustTemplateStart"]);
+    const sourceMonth = requireMonthKey(body.sourceMonth);
+    const targetMonth = requireMonthKey(body.targetMonth);
+    if (!Array.isArray(body.entryIds) || body.entryIds.length < 1 || body.entryIds.length > 500) {
+      throw httpError(400, "Selecione entre 1 e 500 lancamentos para transferir.", "invalid_transfer_selection");
+    }
+    const entryIds = body.entryIds.map((entryId) => requireUuid(entryId, "Lancamento"));
+    const conflictPolicy = String(body.conflictPolicy || "skip");
+    if (!["skip", "replace"].includes(conflictPolicy)) {
+      throw httpError(400, "Politica de conflito invalida.", "invalid_conflict_policy");
+    }
+    const adjustTemplateStart = normalizeBoolean(body.adjustTemplateStart, "Ajuste do inicio dos gastos fixos");
+    const transfer = transferPendingEntries(user.id, {
+      sourceMonth,
+      targetMonth,
+      entryIds,
+      conflictPolicy,
+      adjustTemplateStart,
+    });
+    sendJson(response, 200, { ...buildBootstrapPayload(user, targetMonth), transfer });
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/templates") {
     await handleTemplateCreate(request, response, user);
     return;
@@ -762,6 +797,8 @@ function allowedMethodsForPath(pathname) {
     "/api/months": ["POST"],
     "/api/salary": ["POST"],
     "/api/entries/bulk": ["PATCH"],
+    "/api/entries/transfer/preview": ["POST"],
+    "/api/entries/transfer": ["POST"],
     "/api/templates": ["POST"],
     "/api/categories": ["GET", "POST"],
     "/api/bank-imports": ["GET"],

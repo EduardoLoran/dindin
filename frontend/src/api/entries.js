@@ -38,3 +38,17 @@ export function updateEntriesBulk(monthKey, entries) {
     body: JSON.stringify({ monthKey, entries }),
   });
 }
+
+export function previewEntryTransfer(sourceMonth, targetMonth) {
+  return apiRequest("/api/entries/transfer/preview", {
+    method: "POST",
+    body: JSON.stringify({ sourceMonth, targetMonth }),
+  });
+}
+
+export function transferEntries(payload) {
+  return apiRequest("/api/entries/transfer", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}

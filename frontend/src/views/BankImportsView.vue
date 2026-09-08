@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from "vue";
-import { Dialog, DialogPanel, DialogTitle, Tab, TabGroup, TabList, TabPanel, TabPanels, TransitionChild, TransitionRoot } from "@headlessui/vue";
+import { Dialog, DialogPanel, DialogTitle, Menu, MenuButton, MenuItem, MenuItems, Tab, TabGroup, TabList, TabPanel, TabPanels, TransitionChild, TransitionRoot } from "@headlessui/vue";
 import AppIcon from "../components/AppIcon.vue";
 import CategoryManagerDialog from "../components/CategoryManagerDialog.vue";
 import ConfirmDialog from "../components/ConfirmDialog.vue";
@@ -30,6 +30,7 @@ const undoing = ref(false);
 const undoTarget = ref(null);
 const detailImport = ref(null);
 const loadingDetails = ref(false);
+const historyMenuPosition = ref({ top: "0px", left: "0px" });
 const error = ref("");
 const notice = ref("");
 
@@ -327,6 +328,14 @@ async function openDetails(item) {
   }
 }
 
+function positionHistoryMenu(event) {
+  const rect = event.currentTarget.getBoundingClientRect();
+  historyMenuPosition.value = {
+    top: `${Math.min(window.innerHeight - 130, rect.bottom + 6)}px`,
+    left: `${Math.max(12, rect.right - 194)}px`,
+  };
+}
+
 async function loadCategories() {
   try {
     const payload = await getCategories();
@@ -421,7 +430,15 @@ onMounted(() => Promise.all([loadHistory(), loadCategories()]));
             <div v-if="loadingHistory" class="workspace-empty workspace-empty--compact">Carregando histórico...</div>
             <div v-else-if="history.length" class="dynamic-table-wrap">
               <table class="dynamic-table import-history-table"><thead><tr><th>Arquivo</th><th>Instituição</th><th>Período</th><th>Gastos</th><th>Receitas</th><th>Situação</th><th></th></tr></thead><tbody>
-                <tr v-for="item in history" :key="item.id"><td data-label="Arquivo"><strong>{{ item.filename }}</strong><small>{{ formatDateTime(item.completedAt || item.createdAt) }}</small></td><td data-label="Instituição">{{ item.bankName }}<small>{{ item.accountLabel }}</small></td><td data-label="Período">{{ formatDate(item.dateFrom) }}<small>até {{ formatDate(item.dateTo) }}</small></td><td data-label="Gastos">{{ formatCurrency(item.expenseTotal) }}</td><td data-label="Receitas">{{ formatCurrency(item.incomeTotal) }}</td><td data-label="Situação"><span class="import-tag" :class="item.status === 'undone' ? 'import-tag--ignored' : 'import-tag--ready'">{{ item.status === "undone" ? "Desfeita" : "Concluída" }}</span></td><td class="dynamic-table__actions import-history-actions"><button type="button" :disabled="loadingDetails" @click="openDetails(item)">Detalhes</button><button v-if="item.status === 'completed'" class="is-danger" type="button" @click="undoTarget = item">Desfazer</button></td></tr>
+                <tr v-for="item in history" :key="item.id"><td data-label="Arquivo"><strong>{{ item.filename }}</strong><small>{{ formatDateTime(item.completedAt || item.createdAt) }}</small></td><td data-label="Instituição">{{ item.bankName }}<small>{{ item.accountLabel }}</small></td><td data-label="Período">{{ formatDate(item.dateFrom) }}<small>até {{ formatDate(item.dateTo) }}</small></td><td data-label="Gastos">{{ formatCurrency(item.expenseTotal) }}</td><td data-label="Receitas">{{ formatCurrency(item.incomeTotal) }}</td><td data-label="Situação"><span class="import-tag" :class="item.status === 'undone' ? 'import-tag--ignored' : 'import-tag--ready'">{{ item.status === "undone" ? "Desfeita" : "Concluída" }}</span></td><td class="dynamic-table__actions import-history-actions">
+                  <Menu as="div" class="import-history-menu">
+                    <MenuButton class="import-history-menu__trigger" type="button" aria-label="Abrir ações da importação" @click="positionHistoryMenu"><AppIcon name="more" :size="18" /></MenuButton>
+                    <Teleport to="body"><TransitionRoot enter="menu-transition" enter-from="menu-hidden" enter-to="menu-visible" leave="menu-transition" leave-from="menu-visible" leave-to="menu-hidden"><MenuItems class="import-history-menu__items" :style="historyMenuPosition">
+                      <MenuItem v-slot="{ active }"><button type="button" :class="{ 'is-active': active }" :disabled="loadingDetails" @click="openDetails(item)"><AppIcon name="eye" :size="17" /><span><strong>Ver detalhes</strong><small>Consultar movimentações</small></span></button></MenuItem>
+                      <MenuItem v-if="item.status === 'completed'" v-slot="{ active }"><button class="is-danger" type="button" :class="{ 'is-active': active }" @click="undoTarget = item"><AppIcon name="undo" :size="17" /><span><strong>Desfazer importação</strong><small>Remover este lote</small></span></button></MenuItem>
+                    </MenuItems></TransitionRoot></Teleport>
+                  </Menu>
+                </td></tr>
               </tbody></table>
             </div>
             <div v-else class="workspace-empty"><AppIcon name="bank-import" :size="34" /><h3>Nenhuma importação realizada.</h3><p>Seus arquivos processados aparecerão aqui.</p></div>

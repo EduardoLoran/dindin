@@ -8,8 +8,9 @@ import EntryEditDialog from "../components/EntryEditDialog.vue";
 import EntryObservationDialog from "../components/EntryObservationDialog.vue";
 import IncomeClassificationDialog from "../components/IncomeClassificationDialog.vue";
 import MonthPageHeader from "../components/MonthPageHeader.vue";
+import TransferEntriesDialog from "../components/TransferEntriesDialog.vue";
 import { initializeMonthEntries } from "../api/dashboard";
-import { deleteEntry, deleteMonthEntries, updateEntry, updateEntryObservation, updateIncomeClassification } from "../api/entries";
+import { deleteEntry, deleteMonthEntries, transferEntries, updateEntry, updateEntryObservation, updateIncomeClassification } from "../api/entries";
 import { useMonthlyBootstrap } from "../composables/useMonthlyBootstrap";
 import { formatCurrency, formatMonth } from "../utils/formatters";
 
@@ -25,6 +26,7 @@ const observationOpen = ref(false);
 const classificationOpen = ref(false);
 const deleteOpen = ref(false);
 const deleteAllOpen = ref(false);
+const transferOpen = ref(false);
 const selectedEntry = ref(null);
 
 const isClosed = computed(() => Boolean(payload.value?.month?.isClosed));
@@ -33,6 +35,7 @@ const visibleExpenses = computed(() => visibleRows.value.filter((entry) => entry
 const visibleIncome = computed(() => visibleRows.value.filter((entry) => entry.direction === "income").reduce((total, entry) => total + Number(entry.amount || 0), 0));
 const expenseCount = computed(() => rows.value.filter((entry) => entry.direction !== "income").length);
 const incomeCount = computed(() => rows.value.filter((entry) => entry.direction === "income").length);
+const transferableCount = computed(() => rows.value.filter((entry) => entry.direction === "expense" && entry.status === "pending" && ["manual", "fixed"].includes(entry.sourceType)).length);
 
 const columns = computed(() => [
   { title: "Ações", field: "actions", width: isClosed.value ? 78 : 112, minWidth: isClosed.value ? 78 : 112, maxWidth: isClosed.value ? 78 : 112, cssClass: "entries-actions-cell", headerHozAlign: "center", clipboard: false, headerSort: false, formatter: actionsFormatter, cellClick: handleActionClick },
@@ -299,6 +302,28 @@ async function confirmDeleteMonthEntries(directions) {
   }
 }
 
+function openTransfer() {
+  actionError.value = "";
+  transferOpen.value = true;
+}
+
+async function confirmTransfer(options) {
+  if (saving.value) return;
+  saving.value = true;
+  actionError.value = "";
+  try {
+    const result = await transferEntries(options);
+    initialize(result);
+    transferOpen.value = false;
+    const skipped = result.transfer.skippedCount ? ` ${result.transfer.skippedCount} conflito(s) permaneceram em ${formatMonth(result.transfer.sourceMonth)}.` : "";
+    showNotice(`${result.transfer.movedCount} ${result.transfer.movedCount === 1 ? "pendência transferida" : "pendências transferidas"} para ${formatMonth(result.transfer.targetMonth)}.${skipped}`);
+  } catch (requestError) {
+    actionError.value = requestError.message;
+  } finally {
+    saving.value = false;
+  }
+}
+
 function showNotice(message) {
   notice.value = message;
   window.setTimeout(() => { if (notice.value === message) notice.value = ""; }, 3000);
@@ -321,10 +346,10 @@ listenPeriodChanges((nextPayload) => { if (nextPayload) initialize(nextPayload);
       <section class="workspace-panel entries-workspace">
         <div class="workspace-panel__heading">
           <div><h2>Lançamentos do mês</h2><p>{{ isClosed ? "Mês fechado para consulta." : "Lançamentos consolidados do período selecionado." }}</p></div>
-          <button class="workspace-danger" type="button" :disabled="saving || isClosed || rows.length === 0" @click="deleteAllOpen = true">
-            <AppIcon name="trash" :size="16" />
-            Excluir lançamentos
-          </button>
+          <div class="entries-heading-actions">
+            <button class="workspace-secondary" type="button" :disabled="saving || isClosed || transferableCount === 0" @click="openTransfer"><AppIcon name="arrow-right" :size="16" />Transferir pendências <span v-if="transferableCount">{{ transferableCount }}</span></button>
+            <button class="workspace-danger" type="button" :disabled="saving || isClosed || rows.length === 0" @click="deleteAllOpen = true"><AppIcon name="trash" :size="16" />Excluir lançamentos</button>
+          </div>
         </div>
         <p v-if="actionError" class="workspace-error" role="alert">{{ actionError }}</p>
         <DataGrid :rows="rows" :columns="columns" :options="gridOptions" :refresh-key="`${selectedMonth}:${isClosed}`" @data-filtered="visibleRows = $event" />
@@ -336,6 +361,7 @@ listenPeriodChanges((nextPayload) => { if (nextPayload) initialize(nextPayload);
       <IncomeClassificationDialog :open="classificationOpen" :entry="selectedEntry" :saving="saving" :readonly="isClosed" :error="actionError" @close="classificationOpen = false" @save="saveIncomeClassification" />
       <ConfirmDialog :open="deleteOpen" title="Excluir lançamento?" :message="`O lançamento “${selectedEntry?.name || ''}” será removido apenas deste mês.`" confirm-label="Excluir lançamento" :busy="saving" @close="deleteOpen = false" @confirm="confirmDelete" />
       <DeleteMonthEntriesDialog :open="deleteAllOpen" :month-label="formatMonth(selectedMonth)" :expense-count="expenseCount" :income-count="incomeCount" :busy="saving" @close="deleteAllOpen = false" @confirm="confirmDeleteMonthEntries" />
+      <TransferEntriesDialog :open="transferOpen" :source-month="selectedMonth" :busy="saving" :error="actionError" @close="transferOpen = false" @confirm="confirmTransfer" />
     </template>
   </div>
 </template>

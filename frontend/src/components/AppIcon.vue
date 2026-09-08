@@ -97,6 +97,9 @@ defineProps({
     <template v-else-if="name === 'more'">
       <circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" />
     </template>
+    <template v-else-if="name === 'undo'">
+      <path d="M9 8H4V3M4.5 8A8 8 0 1 1 4 15" />
+    </template>
     <template v-else-if="name === 'note'">
       <path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h5" />
     </template>

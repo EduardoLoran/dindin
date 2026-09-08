@@ -94,6 +94,14 @@ function deactivateTemplate(userId, templateId) {
   `).run(templateId, userId);
 }
 
+function moveTemplateStartMonthIfMatches(userId, templateId, sourceMonth, targetMonth) {
+  return db.prepare(`
+    UPDATE templates
+    SET start_month = ?
+    WHERE id = ? AND user_id = ? AND start_month = ?
+  `).run(targetMonth, templateId, userId, sourceMonth);
+}
+
 module.exports = {
   listTemplates,
   findTemplateById,
@@ -102,4 +110,5 @@ module.exports = {
   updateTemplate,
   updateTemplateObservation,
   deactivateTemplate,
+  moveTemplateStartMonthIfMatches,
 };

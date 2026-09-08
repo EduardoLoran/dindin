@@ -9,6 +9,7 @@ const props = defineProps({
   modelValue: { type: String, default: "" },
   disabled: { type: Boolean, default: false },
   inputId: { type: String, default: "month-picker" },
+  teleport: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(["update:modelValue"]);
@@ -71,7 +72,7 @@ function toMonthKey(value) {
     month-picker
     auto-apply
     centered
-    :teleport="true"
+    :teleport="teleport"
     :locale="ptBR"
     :disabled="disabled"
     :dark="isDark"

@@ -263,6 +263,99 @@ test("falha no segundo item do lote faz rollback da transacao inteira", async ()
   assert.equal(unchangedSecond.status, "pending");
 });
 
+test("transferencia move pendencias, resolve conflitos fixos e ajusta o mes inicial", async () => {
+  const transferUser = await register("usuario-transferencia", "usuario-transferencia@example.com");
+  await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-08", salary: 4000, includeFixedEntries: false },
+    session: transferUser,
+  });
+  await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-09", salary: 4000, includeFixedEntries: true },
+    session: transferUser,
+  });
+
+  const fixed = await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Internet para transferir",
+      amount: 120,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Boleto",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: false,
+      monthKey: "2026-08",
+    },
+    session: transferUser,
+  });
+  const fixedEntry = fixed.payload.month.entries.find((entry) => entry.name === "Internet para transferir");
+
+  const variable = await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Compra eventual para transferir",
+      amount: 85,
+      cycle: "Quinzena",
+      paymentMethod: "Pix",
+      observation: "",
+      startMonth: "2026-08",
+      isVariable: true,
+      monthKey: "2026-08",
+    },
+    session: transferUser,
+  });
+  const variableEntry = variable.payload.month.entries.find((entry) => entry.name === "Compra eventual para transferir");
+
+  const preview = await request("/api/entries/transfer/preview", {
+    method: "POST",
+    body: { sourceMonth: "2026-08", targetMonth: "2026-09" },
+    session: transferUser,
+  });
+  assert.equal(preview.status, 200);
+  assert.equal(preview.payload.transfer.itemCount, 2);
+  assert.equal(preview.payload.transfer.conflictCount, 1);
+  assert.equal(preview.payload.transfer.items.find((item) => item.id === fixedEntry.id).conflict.canReplace, true);
+  assert.equal(preview.payload.transfer.items.find((item) => item.id === variableEntry.id).conflict, null);
+
+  const transferred = await request("/api/entries/transfer", {
+    method: "POST",
+    body: {
+      sourceMonth: "2026-08",
+      targetMonth: "2026-09",
+      entryIds: [fixedEntry.id, variableEntry.id],
+      conflictPolicy: "replace",
+      adjustTemplateStart: true,
+    },
+    session: transferUser,
+  });
+  assert.equal(transferred.status, 200);
+  assert.equal(transferred.payload.activeMonth, "2026-09");
+  assert.equal(transferred.payload.transfer.movedCount, 2);
+  assert.equal(transferred.payload.transfer.skippedCount, 0);
+  assert.equal(transferred.payload.transfer.adjustedTemplateCount, 2);
+  assert.ok(transferred.payload.month.entries.some((entry) => entry.id === fixedEntry.id));
+  assert.ok(transferred.payload.month.entries.some((entry) => entry.id === variableEntry.id));
+
+  const source = await request("/api/bootstrap?month=2026-08", { session: transferUser });
+  assert.equal(source.payload.month.entries.some((entry) => [fixedEntry.id, variableEntry.id].includes(entry.id)), false);
+
+  const database = new DatabaseSync(databaseFile, { readOnly: true });
+  const movedTemplates = database.prepare(`
+    SELECT COUNT(*) AS total FROM templates
+    WHERE user_id = (SELECT id FROM users WHERE username = ?) AND start_month = ?
+      AND name IN (?, ?)
+  `).get("usuario-transferencia", "2026-09", "Internet para transferir", "Compra eventual para transferir");
+  const audit = database.prepare(`
+    SELECT COUNT(*) AS total FROM audit_events
+    WHERE user_id = (SELECT id FROM users WHERE username = ?) AND event_type = ?
+  `).get("usuario-transferencia", "pending_entries_transferred");
+  database.close();
+  assert.equal(Number(movedTemplates.total), 2);
+  assert.equal(Number(audit.total), 1);
+});
+
 test("exclusao em massa permite selecionar gastos e receitas do mes", async () => {
   const bulkUser = await register("usuario-limpeza", "usuario-limpeza@example.com");
   await request("/api/months", {

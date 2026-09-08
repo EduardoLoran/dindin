@@ -22,7 +22,8 @@ function listEntries(userId, monthKey) {
       categories.name AS category_name,
       categories.color AS category_color,
       entries.created_at,
-      entries.updated_at
+      entries.updated_at,
+      templates.start_month AS template_start_month
     FROM entries
     LEFT JOIN templates ON templates.id = entries.template_id
     LEFT JOIN categories ON categories.id = entries.category_id
@@ -257,7 +258,17 @@ function updateEntryFromTemplate(userId, entryId, template, updatedAt) {
 }
 
 function deleteEntry(userId, entryId) {
-  db.prepare("DELETE FROM entries WHERE id = ? AND user_id = ?").run(entryId, userId);
+  return db.prepare("DELETE FROM entries WHERE id = ? AND user_id = ?").run(entryId, userId);
+}
+
+function movePendingEntryToMonth(userId, entryId, sourceMonth, targetMonth, updatedAt) {
+  return db.prepare(`
+    UPDATE entries
+    SET month_key = ?, updated_at = ?
+    WHERE id = ? AND user_id = ? AND month_key = ?
+      AND direction = 'expense' AND status = 'pending'
+      AND source_type IN ('manual', 'fixed')
+  `).run(targetMonth, updatedAt, entryId, userId, sourceMonth);
 }
 
 function updateIncomeClassification(userId, entryId, isSalary, updatedAt) {
@@ -314,6 +325,7 @@ module.exports = {
   updateEntriesBulk,
   updateEntryFromTemplate,
   deleteEntry,
+  movePendingEntryToMonth,
   updateIncomeClassification,
   deleteEntriesByMonthAndDirections,
   deleteEntriesByIds,
