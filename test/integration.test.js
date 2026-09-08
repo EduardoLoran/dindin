@@ -263,7 +263,7 @@ test("falha no segundo item do lote faz rollback da transacao inteira", async ()
   assert.equal(unchangedSecond.status, "pending");
 });
 
-test("transferencia move pendencias, resolve conflitos fixos e ajusta o mes inicial", async () => {
+test("transferencia pode ser refeita e ajusta os gastos fixos nos dois sentidos", async () => {
   const transferUser = await register("usuario-transferencia", "usuario-transferencia@example.com");
   await request("/api/months", {
     method: "POST",
@@ -341,19 +341,48 @@ test("transferencia move pendencias, resolve conflitos fixos e ajusta o mes inic
   const source = await request("/api/bootstrap?month=2026-08", { session: transferUser });
   assert.equal(source.payload.month.entries.some((entry) => [fixedEntry.id, variableEntry.id].includes(entry.id)), false);
 
+  const repeatedPreview = await request("/api/entries/transfer/preview", {
+    method: "POST",
+    body: { sourceMonth: "2026-09", targetMonth: "2026-08" },
+    session: transferUser,
+  });
+  assert.equal(repeatedPreview.status, 200);
+  assert.equal(repeatedPreview.payload.transfer.itemCount, 2);
+  assert.equal(repeatedPreview.payload.transfer.conflictCount, 0);
+
+  const returned = await request("/api/entries/transfer", {
+    method: "POST",
+    body: {
+      sourceMonth: "2026-09",
+      targetMonth: "2026-08",
+      entryIds: [fixedEntry.id, variableEntry.id],
+      conflictPolicy: "replace",
+      adjustTemplateStart: true,
+    },
+    session: transferUser,
+  });
+  assert.equal(returned.status, 200);
+  assert.equal(returned.payload.activeMonth, "2026-08");
+  assert.equal(returned.payload.transfer.movedCount, 2);
+  assert.ok(returned.payload.month.entries.some((entry) => entry.id === fixedEntry.id));
+  assert.ok(returned.payload.month.entries.some((entry) => entry.id === variableEntry.id));
+
+  const repeatedSource = await request("/api/bootstrap?month=2026-09", { session: transferUser });
+  assert.equal(repeatedSource.payload.month.entries.some((entry) => [fixedEntry.id, variableEntry.id].includes(entry.id)), false);
+
   const database = new DatabaseSync(databaseFile, { readOnly: true });
   const movedTemplates = database.prepare(`
     SELECT COUNT(*) AS total FROM templates
     WHERE user_id = (SELECT id FROM users WHERE username = ?) AND start_month = ?
       AND name IN (?, ?)
-  `).get("usuario-transferencia", "2026-09", "Internet para transferir", "Compra eventual para transferir");
+  `).get("usuario-transferencia", "2026-08", "Internet para transferir", "Compra eventual para transferir");
   const audit = database.prepare(`
     SELECT COUNT(*) AS total FROM audit_events
     WHERE user_id = (SELECT id FROM users WHERE username = ?) AND event_type = ?
   `).get("usuario-transferencia", "pending_entries_transferred");
   database.close();
   assert.equal(Number(movedTemplates.total), 2);
-  assert.equal(Number(audit.total), 1);
+  assert.equal(Number(audit.total), 2);
 });
 
 test("exclusao em massa permite selecionar gastos e receitas do mes", async () => {

@@ -10,7 +10,7 @@ const { assertMonthOpen, ensureMonthExists } = require("./monthService");
 const TRANSFERABLE_SOURCES = new Set(["manual", "fixed"]);
 
 function previewPendingEntryTransfer(userId, sourceMonth, targetMonth) {
-  validateMonthOrder(sourceMonth, targetMonth);
+  validateDifferentMonths(sourceMonth, targetMonth);
   assertMonthOpen(userId, sourceMonth);
   const target = getMonthRecord(userId, targetMonth);
   if (target?.closed_at) throw httpError(409, "O mes de destino esta fechado.", "target_month_closed");
@@ -137,9 +137,9 @@ function serializeTransferItem(entry, targetEntry) {
   };
 }
 
-function validateMonthOrder(sourceMonth, targetMonth) {
-  if (targetMonth <= sourceMonth) {
-    throw httpError(400, "Escolha um mes de destino posterior ao mes de origem.", "invalid_transfer_month");
+function validateDifferentMonths(sourceMonth, targetMonth) {
+  if (targetMonth === sourceMonth) {
+    throw httpError(400, "Escolha um mes de destino diferente do mes de origem.", "invalid_transfer_month");
   }
 }
 
