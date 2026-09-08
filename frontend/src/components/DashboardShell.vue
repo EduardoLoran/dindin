@@ -4,14 +4,16 @@ import { useRoute, useRouter } from "vue-router";
 import { Dialog, DialogPanel, Menu, MenuButton, MenuItem, MenuItems, TransitionChild, TransitionRoot } from "@headlessui/vue";
 import AppIcon from "./AppIcon.vue";
 import BrandLogo from "./BrandLogo.vue";
+import DeleteMonthDialog from "./DeleteMonthDialog.vue";
 import MonthSelector from "./MonthSelector.vue";
 import ProfileDialog from "./ProfileDialog.vue";
 import ThemeToggle from "./ThemeToggle.vue";
 import { changePassword, updateProfile } from "../api/auth";
-import { getDashboard } from "../api/dashboard";
+import { deleteMonth, getDashboard } from "../api/dashboard";
 import { useGlobalPeriod } from "../composables/useGlobalPeriod";
 import { endSession, setAuthenticatedUser, useSession } from "../composables/useSession";
 import { useValuePrivacy } from "../composables/useValuePrivacy";
+import { formatMonth } from "../utils/formatters";
 
 const SIDEBAR_KEY = "dindin-sidebar-collapsed";
 const route = useRoute();
@@ -30,6 +32,9 @@ const savingPassword = ref(false);
 const profileError = ref("");
 const passwordError = ref("");
 const profileNotice = ref("");
+const deleteMonthOpen = ref(false);
+const deletingMonth = ref(false);
+const deleteMonthError = ref("");
 
 const navItems = computed(() => [
   { label: "Visão geral", href: "/visao-geral", icon: "home", modern: true },
@@ -81,6 +86,28 @@ function selectGlobalPeriod(monthKey) {
   changeSelectedMonth(monthKey);
 }
 
+function requestDeleteMonth() {
+  if (!selectedPeriod.value || selectedPeriod.value.isClosed || deletingMonth.value) return;
+  deleteMonthError.value = "";
+  deleteMonthOpen.value = true;
+}
+
+async function confirmDeleteMonth() {
+  if (!selectedPeriod.value || deletingMonth.value) return;
+  deletingMonth.value = true;
+  deleteMonthError.value = "";
+  try {
+    const payload = await deleteMonth(selectedMonth.value);
+    periodPayload.value = payload;
+    deleteMonthOpen.value = false;
+    changeSelectedMonth(payload.activeMonth);
+  } catch (error) {
+    deleteMonthError.value = error.message;
+  } finally {
+    deletingMonth.value = false;
+  }
+}
+
 function refreshPeriods(event) {
   loadPeriods(event.detail?.monthKey || selectedMonth.value);
 }
@@ -126,6 +153,9 @@ onMounted(() => {
   loadPeriods();
   window.addEventListener(periodsChangedEvent, refreshPeriods);
 });
+const selectedPeriod = computed(() => periodPayload.value?.months?.find((month) => month.monthKey === selectedMonth.value) || null);
+const selectedEntryCount = computed(() => selectedPeriod.value ? Number(periodPayload.value?.month?.entries?.length || 0) : 0);
+const selectedMonthLabel = computed(() => formatMonth(selectedMonth.value));
 onBeforeUnmount(() => window.removeEventListener(periodsChangedEvent, refreshPeriods));
 </script>
 
@@ -170,7 +200,11 @@ onBeforeUnmount(() => window.removeEventListener(periodsChangedEvent, refreshPer
             :months="periodPayload?.months || []"
             :disabled="loadingPeriods"
             label="Período"
+            :deletable="Boolean(selectedPeriod)"
+            :delete-disabled="Boolean(selectedPeriod?.isClosed) || deletingMonth"
+            :delete-title="selectedPeriod?.isClosed ? 'Reabra este período antes de excluí-lo' : `Excluir ${selectedMonthLabel}`"
             @change="selectGlobalPeriod"
+            @delete="requestDeleteMonth"
           />
         </div>
 
@@ -222,6 +256,16 @@ onBeforeUnmount(() => window.removeEventListener(periodsChangedEvent, refreshPer
       @close="profileOpen = false"
       @save-profile="saveProfile"
       @change-password="savePassword"
+    />
+
+    <DeleteMonthDialog
+      :open="deleteMonthOpen"
+      :month-label="selectedMonthLabel"
+      :entry-count="selectedEntryCount"
+      :busy="deletingMonth"
+      :error="deleteMonthError"
+      @close="deleteMonthOpen = false"
+      @confirm="confirmDeleteMonth"
     />
 
     <TransitionRoot :show="mobileOpen" as="template">

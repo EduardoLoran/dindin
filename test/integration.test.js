@@ -207,6 +207,69 @@ test("mes fechado bloqueia mutacoes e reabertura restaura o acesso", async () =>
   assert.equal(saved.payload.month.entries[0].amount, 1250);
 });
 
+test("excluir mes remove seus dados e preserva cadastros recorrentes", async () => {
+  const deleteUser = await register("usuario-excluir-mes", "usuario-excluir-mes@example.com");
+  await request("/api/months", {
+    method: "POST",
+    body: { monthKey: "2026-12", salary: 5400, includeFixedEntries: false },
+    session: deleteUser,
+  });
+  const created = await request("/api/templates", {
+    method: "POST",
+    body: {
+      name: "Cadastro de dezembro",
+      amount: 250,
+      cycle: "Inicio Do Mes",
+      paymentMethod: "Pix",
+      observation: "",
+      startMonth: "2026-12",
+      isVariable: false,
+      monthKey: "2026-12",
+    },
+    session: deleteUser,
+  });
+  assert.equal(created.payload.month.entries.length, 1);
+
+  const ofx = buildBankOfx([{ type: "DEBIT", date: "20261210", amount: "-45.00", fitId: "delete-month-expense", name: "Compra de dezembro" }]);
+  const preview = await request("/api/bank-imports/ofx/preview", {
+    method: "POST",
+    rawBody: Buffer.from(ofx, "latin1"),
+    contentType: "application/x-ofx",
+    headers: { "X-Import-Directions": "expense" },
+    session: deleteUser,
+  });
+  const importItem = preview.payload.import.items[0];
+  const confirmed = await request(`/api/bank-imports/${preview.payload.import.id}/confirm`, {
+    method: "POST",
+    body: { decisions: [{ itemId: importItem.id, action: "create", description: importItem.description, cycle: importItem.suggestedCycle, paymentMethod: importItem.paymentMethod, categoryId: importItem.suggestedCategoryId }] },
+    session: deleteUser,
+  });
+  assert.equal(confirmed.status, 200);
+
+  const removed = await request("/api/months/2026-12", { method: "DELETE", session: deleteUser });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.payload.months.some((month) => month.monthKey === "2026-12"), false);
+
+  const deletedMonth = await request("/api/bootstrap?month=2026-12", { session: deleteUser });
+  assert.equal(deletedMonth.payload.month.entries.length, 0);
+  assert.equal(deletedMonth.payload.month.salaryDefined, false);
+
+  const database = new DatabaseSync(databaseFile, { readOnly: true });
+  const template = database.prepare(`
+    SELECT start_month FROM templates
+    WHERE user_id = (SELECT id FROM users WHERE username = ?) AND name = ?
+  `).get("usuario-excluir-mes", "Cadastro de dezembro");
+  const audit = database.prepare(`
+    SELECT metadata_json FROM audit_events
+    WHERE user_id = (SELECT id FROM users WHERE username = ?) AND event_type = ? AND target_id = ?
+  `).get("usuario-excluir-mes", "month_deleted", "2026-12");
+  const importBatch = database.prepare("SELECT status FROM bank_import_batches WHERE id = ?").get(preview.payload.import.id);
+  database.close();
+  assert.equal(template.start_month, "2027-01");
+  assert.equal(importBatch.status, "undone");
+  assert.equal(JSON.parse(audit.metadata_json).deletedCount, 2);
+});
+
 test("falha no segundo item do lote faz rollback da transacao inteira", async () => {
   const secondTemplate = await request("/api/templates", {
     method: "POST",

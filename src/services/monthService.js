@@ -2,6 +2,8 @@ const { DEFAULT_SALARY_CENTS } = require("../config");
 const { runInTransaction } = require("../db/schema");
 const { httpError } = require("../lib/errors");
 const { addMonthsToMonthKey, getCurrentMonthKey, normalizeMonthKey } = require("../lib/values");
+const { insertAuditEvent } = require("../repositories/auditRepository");
+const { releaseImportItemsForEntries, releaseOrphanedImportItems } = require("../repositories/bankImportRepository");
 const {
   listMonths,
   getMonthRecord,
@@ -18,6 +20,7 @@ const {
   deleteEntriesByMonth,
   findEntryByTemplateInMonth,
   insertEntryFromTemplate,
+  listEntries,
   listDuplicateTemplateEntryGroups,
   listEntryIdsByTemplateInMonth,
   updateEntryFromTemplate,
@@ -124,12 +127,26 @@ function syncTemplateEntryForMonth(userId, templateId, monthKey) {
 
 function deleteMonthWithEntries(userId, monthKey) {
   assertMonthOpen(userId, monthKey);
+  const entries = listEntries(userId, monthKey);
+  const entryIds = entries.map((entry) => entry.id);
+  const deletedCount = entryIds.length;
   runInTransaction(() => {
+    const deletedAt = new Date().toISOString();
+    const releasedImportCount = releaseImportItemsForEntries(userId, entryIds, deletedAt);
     const nextMonthKey = addMonthsToMonthKey(monthKey, 1);
     if (nextMonthKey) moveTemplateStartMonth(userId, monthKey, nextMonthKey);
     deleteEntriesByMonth(userId, monthKey);
     deleteMonth(userId, monthKey);
+    releaseOrphanedImportItems(userId, deletedAt);
+    insertAuditEvent({
+      userId,
+      eventType: "month_deleted",
+      targetType: "month",
+      targetId: monthKey,
+      metadata: { deletedCount, releasedImportCount, nextMonthKey },
+    });
   });
+  return { deletedCount };
 }
 
 module.exports = {

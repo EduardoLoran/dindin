@@ -1512,7 +1512,7 @@
   .app-topbar { min-height: 68px; padding-inline: 16px; }
   .app-topbar__title { display: none; }
   .app-topbar .app-period-select { width: min(42vw, 220px); min-width: 0; }
-  .app-topbar .app-period-select .month-select__copy small { display: none; }
+  .app-topbar .app-period-select .month-select__copy small:not(.is-closed) { display: none; }
   .app-topbar .app-period-select .month-select__button { min-height: 44px; padding: 5px 9px; }
   .app-topbar .app-period-select .month-select__icon { width: 34px; height: 34px; }
   .app-topbar .theme-toggle > span:last-child,

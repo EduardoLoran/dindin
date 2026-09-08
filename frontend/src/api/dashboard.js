@@ -27,3 +27,7 @@ export function closeMonth(monthKey) {
 export function reopenMonth(monthKey) {
   return apiRequest(`/api/months/${encodeURIComponent(monthKey)}/reopen`, { method: "POST", body: "{}" });
 }
+
+export function deleteMonth(monthKey) {
+  return apiRequest(`/api/months/${encodeURIComponent(monthKey)}`, { method: "DELETE" });
+}

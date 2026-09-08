@@ -144,6 +144,7 @@ async function confirmMonthStateChange() {
     dashboard.value = month.value?.isClosed
       ? await reopenMonth(selectedMonth.value)
       : await closeMonth(selectedMonth.value);
+    notifyPeriodsChanged(selectedMonth.value);
     monthStateConfirmOpen.value = false;
   } catch (stateError) {
     salaryError.value = stateError.message;
