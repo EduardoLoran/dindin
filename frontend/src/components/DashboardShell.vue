@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Dialog, DialogPanel, Menu, MenuButton, MenuItem, MenuItems, TransitionChild, TransitionRoot } from "@headlessui/vue";
 import AppIcon from "./AppIcon.vue";
@@ -17,7 +17,7 @@ const SIDEBAR_KEY = "dindin-sidebar-collapsed";
 const route = useRoute();
 const router = useRouter();
 const { user } = useSession();
-const { selectedMonth, setSelectedMonth, changeSelectedMonth } = useGlobalPeriod();
+const { selectedMonth, setSelectedMonth, changeSelectedMonth, periodsChangedEvent } = useGlobalPeriod();
 const { valuesHidden, toggleValuesVisibility } = useValuePrivacy();
 const mobileOpen = ref(false);
 const collapsed = ref(window.localStorage.getItem(SIDEBAR_KEY) === "true");
@@ -62,10 +62,10 @@ async function signOut() {
   }
 }
 
-async function loadPeriods() {
+async function loadPeriods(monthKey = selectedMonth.value) {
   loadingPeriods.value = true;
   try {
-    let payload = await getDashboard(selectedMonth.value);
+    let payload = await getDashboard(monthKey);
     const latestMonth = payload.months?.[0]?.monthKey;
     if (!selectedMonth.value && latestMonth && latestMonth !== payload.activeMonth) payload = await getDashboard(latestMonth);
     periodPayload.value = payload;
@@ -79,6 +79,10 @@ async function loadPeriods() {
 
 function selectGlobalPeriod(monthKey) {
   changeSelectedMonth(monthKey);
+}
+
+function refreshPeriods(event) {
+  loadPeriods(event.detail?.monthKey || selectedMonth.value);
 }
 
 function openProfile() {
@@ -118,7 +122,11 @@ async function savePassword(payload) {
   }
 }
 
-onMounted(loadPeriods);
+onMounted(() => {
+  loadPeriods();
+  window.addEventListener(periodsChangedEvent, refreshPeriods);
+});
+onBeforeUnmount(() => window.removeEventListener(periodsChangedEvent, refreshPeriods));
 </script>
 
 <template>

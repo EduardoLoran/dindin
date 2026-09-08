@@ -1,6 +1,7 @@
 import { ref } from "vue";
 
 const STORAGE_KEY = "dindin-selected-month";
+const PERIODS_CHANGED_EVENT = "dindin-periods-changed";
 const selectedMonth = ref(readStoredMonth());
 
 function readStoredMonth() {
@@ -26,6 +27,10 @@ function changeSelectedMonth(monthKey) {
   setSelectedMonth(monthKey, { notify: true });
 }
 
+function notifyPeriodsChanged(monthKey = selectedMonth.value) {
+  window.dispatchEvent(new CustomEvent(PERIODS_CHANGED_EVENT, { detail: { monthKey } }));
+}
+
 export function useGlobalPeriod() {
-  return { selectedMonth, setSelectedMonth, changeSelectedMonth };
+  return { selectedMonth, setSelectedMonth, changeSelectedMonth, notifyPeriodsChanged, periodsChangedEvent: PERIODS_CHANGED_EVENT };
 }
